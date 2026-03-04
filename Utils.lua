@@ -87,6 +87,16 @@ function SpellTooltips.Utils.FormatCoefficient(coeff)
     return string.format("%.1f%%", coeff * 100)
 end
 
+-- Count items in a table (for non-array tables)
+function SpellTooltips.Utils.TableCount(tbl)
+    if not tbl then return 0 end
+    local count = 0
+    for _ in pairs(tbl) do
+        count = count + 1
+    end
+    return count
+end
+
 -- Get player's spell crit chance for a specific school
 function SpellTooltips.Utils.GetPlayerSpellCritChance(school)
     local schoolIndex = SpellTooltips.Schools[string.lower(school or "")]

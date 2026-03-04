@@ -988,6 +988,115 @@ SlashCmdList["SPELLTOOLTIPS"] = function(msg)
         print(string.format("|cFF00FF00SpellTooltips|r Dumped %d spells! /reload then copy from:", count))
         print("  WTF/Account/<name>/SavedVariables/SpellTooltips.lua")
         print("  Look for SpellDump section")
+    elseif msg == "classinfo" then
+        -- Dump all class spells, tooltips, and talents to SavedVariables
+        SpellTooltipsDB = SpellTooltipsDB or {}
+
+        local _, className = UnitClass("player")
+        local localizedClass, _ = UnitClass("player")
+
+        -- Create a hidden tooltip for scanning
+        local scanTip = CreateFrame("GameTooltip", "STTClassInfoTooltip", nil, "GameTooltipTemplate")
+        scanTip:SetOwner(WorldFrame, "ANCHOR_NONE")
+
+        print("|cFF00FF00SpellTooltips|r Generating class info for", localizedClass)
+
+        -- Initialize ClassInfo structure
+        SpellTooltipsDB.ClassInfo = {
+            class = className,
+            localizedClass = localizedClass,
+            exportedAt = date("%Y-%m-%d %H:%M:%S"),
+            spells = {},
+            talents = {
+                trees = {},
+                configured = {}
+            }
+        }
+
+        -- Get talent tree names and talents
+        print("  Scanning talents...")
+        for tab = 1, 3 do
+            local treeName, _, _, _ = GetTalentTabInfo(tab)
+            SpellTooltipsDB.ClassInfo.talents.trees[tab] = {
+                name = treeName or ("Tree " .. tab),
+                talents = {}
+            }
+
+            for i = 1, 30 do
+                local name, iconTexture, tier, column, rank, maxRank = GetTalentInfo(tab, i)
+                if name then
+                    SpellTooltipsDB.ClassInfo.talents.trees[tab].talents[i] = {
+                        name = name,
+                        tier = tier or 0,
+                        column = column or 0,
+                        currentRanks = rank or 0,
+                        maxRanks = maxRank or 0
+                    }
+                end
+            end
+        end
+
+        -- Get configured talents from TalentData
+        for key, info in pairs(SpellTooltips.TalentInfo or {}) do
+            if info.class == className then
+                local ranks = Talents.GetTalentRanksByKey(key)
+                SpellTooltipsDB.ClassInfo.talents.configured[key] = {
+                    name = info.name,
+                    tab = info.tab,
+                    index = info.index,
+                    maxRanks = info.maxRanks,
+                    currentRanks = ranks,
+                    type = info.type,
+                    perRank = info.perRank,
+                    school = info.school,
+                    affects = info.affects
+                }
+            end
+        end
+
+        -- Get all spells for this class
+        print("  Scanning spells...")
+        local spellCount = 0
+        for spellID, spellData in pairs(SpellTooltips.SpellData) do
+            -- Scan tooltip
+            scanTip:ClearLines()
+            scanTip:SetSpellByID(spellID)
+
+            local tooltipLines = {}
+            for i = 1, scanTip:NumLines() do
+                local textLeft = _G["STTClassInfoTooltipTextLeft" .. i]
+                if textLeft then
+                    local text = textLeft:GetText()
+                    if text and text ~= "" then
+                        table.insert(tooltipLines, text)
+                    end
+                end
+            end
+
+            SpellTooltipsDB.ClassInfo.spells[spellID] = {
+                name = spellData.name,
+                school = spellData.school,
+                coefficient = spellData.coefficient,
+                dotCoefficient = spellData.dotCoefficient,
+                castTime = spellData.castTime,
+                isHealing = spellData.isHealing,
+                isDot = spellData.isDot,
+                isChanneled = spellData.isChanneled,
+                isAbsorb = spellData.isAbsorb,
+                isSeal = spellData.isSeal,
+                ticks = spellData.ticks,
+                tooltip = tooltipLines
+            }
+            spellCount = spellCount + 1
+        end
+
+        print(string.format("|cFF00FF00SpellTooltips|r Export complete!"))
+        print(string.format("  Class: %s", localizedClass))
+        print(string.format("  Spells: %d", spellCount))
+        print(string.format("  Talents: %d configured", Utils.TableCount(SpellTooltipsDB.ClassInfo.talents.configured)))
+        print("  /reload then copy from:")
+        print("  WTF/Account/<name>/SavedVariables/SpellTooltips.lua")
+        print("  Look for ClassInfo section")
     else
         print("|cFF00FF00SpellTooltips|r v1.0.0")
         print("  /stt debug - Toggle debug mode")
@@ -997,5 +1106,6 @@ SlashCmdList["SPELLTOOLTIPS"] = function(msg)
         print("  /stt scan 1|2|3 save - Scan and save to file")
         print("  /stt dumpall - Export all talents to SavedVariables")
         print("  /stt dumpspells - Export all spell tooltips to SavedVariables")
+        print("  /stt classinfo - Export full class info (spells + talents)")
     end
 end
