@@ -1,0 +1,19 @@
+## Interface: 20504
+## Title: SpellTooltips
+## Notes: Enhances spell tooltips with spellpower coefficients and damage calculations
+## Author: SpellTooltips
+## Version: 1.0.0
+## SavedVariables: SpellTooltipsDB
+
+Utils.lua
+SpellData.lua
+TalentData.lua
+Tags.lua
+Classes\Mage.lua
+Classes\Paladin.lua
+Classes\Warlock.lua
+Classes\Priest.lua
+Classes\Druid.lua
+Classes\Shaman.lua
+Core.lua
+SpellTests.lua
