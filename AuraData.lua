@@ -11,6 +11,14 @@ local cacheValid = false
 -- Aura definitions (damage multipliers only)
 -- Note: Crit buffs (Moonkin Aura, Leader of the Pack, Totem of Wrath) are already
 -- reflected in GetSpellCritChance() / GetCritChance() so we don't track them here.
+-- Improved Sanctity Aura talent info (for checking when Sanctity Aura is active)
+local IMPROVED_SANCTITY_AURA_TALENT = {
+    tab = 3,
+    index = 17,
+    maxRanks = 2,
+    perRank = 0.01,  -- 1% per rank = 2% at 2/2
+}
+
 SpellTooltips.AuraInfo = {
     -- =====================
     -- PALADIN AURAS
@@ -18,17 +26,16 @@ SpellTooltips.AuraInfo = {
 
     -- Sanctity Aura: +10% Holy damage (Paladin)
     -- The aura buff appears on the player when active
+    -- Improved Sanctity Aura talent adds +1% ALL damage per rank (checked separately)
     SANCTITY_AURA = {
         spellID = 20218,
         name = "Sanctity Aura",
         bonus = 0.10,
         school = "holy",
         class = "PALADIN",
+        -- Improved Sanctity Aura adds +2% all damage when this aura is active
+        improvedTalent = IMPROVED_SANCTITY_AURA_TALENT,
     },
-
-    -- Note: Improved Sanctity Aura (+2% all damage) is a talent that modifies
-    -- Sanctity Aura. It doesn't create a separate buff, so we can't detect it
-    -- via buff scanning. The bonus would need talent checking to implement.
 
     -- =====================
     -- HUNTER AURAS
@@ -98,12 +105,13 @@ end
 
 -- Get damage multiplier from active auras for a specific school
 -- Returns multiplier (e.g., 1.10 for 10% bonus) and list of contributing auras
+-- Auras are MULTIPLICATIVE with each other (1.1 × 1.03 = 1.133)
 function SpellTooltips.Auras.GetSchoolMultiplier(school)
     if not school then return 1.0, {} end
 
     SpellTooltips.Auras.RefreshCache()
 
-    local totalBonus = 0
+    local multiplier = 1.0
     local contributingAuras = {}
     local schoolLower = string.lower(school)
 
@@ -122,25 +130,47 @@ function SpellTooltips.Auras.GetSchoolMultiplier(school)
             end
 
             if applies then
-                totalBonus = totalBonus + info.bonus
-                table.insert(contributingAuras, {
-                    name = info.name,
-                    bonus = info.bonus,
-                    key = key,
-                })
+                local bonus = info.bonus or 0
+                if bonus > 0 then
+                    multiplier = multiplier * (1 + bonus)
+                    table.insert(contributingAuras, {
+                        name = info.name,
+                        bonus = bonus,
+                        key = key,
+                    })
+                end
+            end
+
+            -- Check for improved talent that adds ALL damage bonus
+            if info.improvedTalent then
+                local Talents = SpellTooltips.Talents
+                if Talents and Talents.GetTalentRanks then
+                    local talent = info.improvedTalent
+                    local ranks = Talents.GetTalentRanks(talent.tab, talent.index)
+                    local improvedBonus = ranks * talent.perRank
+                    if improvedBonus > 0 then
+                        multiplier = multiplier * (1 + improvedBonus)
+                        table.insert(contributingAuras, {
+                            name = "Improved " .. info.name,
+                            bonus = improvedBonus,
+                            key = key .. "_IMPROVED",
+                        })
+                    end
+                end
             end
         end
     end
 
-    return 1 + totalBonus, contributingAuras
+    return multiplier, contributingAuras
 end
 
 -- Get physical damage multiplier from active auras
 -- Returns multiplier and list of contributing auras
+-- Auras are MULTIPLICATIVE with each other
 function SpellTooltips.Auras.GetPhysicalMultiplier()
     SpellTooltips.Auras.RefreshCache()
 
-    local totalBonus = 0
+    local multiplier = 1.0
     local contributingAuras = {}
 
     for key, info in pairs(SpellTooltips.AuraInfo) do
@@ -150,17 +180,38 @@ function SpellTooltips.Auras.GetPhysicalMultiplier()
         if isActive then
             -- Physical damage only benefits from "all" school auras
             if info.school == "all" then
-                totalBonus = totalBonus + info.bonus
-                table.insert(contributingAuras, {
-                    name = info.name,
-                    bonus = info.bonus,
-                    key = key,
-                })
+                local bonus = info.bonus or 0
+                if bonus > 0 then
+                    multiplier = multiplier * (1 + bonus)
+                    table.insert(contributingAuras, {
+                        name = info.name,
+                        bonus = bonus,
+                        key = key,
+                    })
+                end
+            end
+
+            -- Check for improved talent that adds ALL damage bonus
+            if info.improvedTalent then
+                local Talents = SpellTooltips.Talents
+                if Talents and Talents.GetTalentRanks then
+                    local talent = info.improvedTalent
+                    local ranks = Talents.GetTalentRanks(talent.tab, talent.index)
+                    local improvedBonus = ranks * talent.perRank
+                    if improvedBonus > 0 then
+                        multiplier = multiplier * (1 + improvedBonus)
+                        table.insert(contributingAuras, {
+                            name = "Improved " .. info.name,
+                            bonus = improvedBonus,
+                            key = key .. "_IMPROVED",
+                        })
+                    end
+                end
             end
         end
     end
 
-    return 1 + totalBonus, contributingAuras
+    return multiplier, contributingAuras
 end
 
 -- Get list of all active auras (for display/debugging)

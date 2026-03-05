@@ -11,7 +11,11 @@ local cacheValid = false
 -- Pre-computed bonus caches (built once on login/talent change)
 local computedCache = {
     schoolMultipliers = {},      -- { fire = 0.10, frost = 0.06, ... } (bonus, not multiplier)
+    schoolMultipliers1H = {},    -- School multipliers that require 1H weapon
+    schoolMultipliers2H = {},    -- School multipliers that require 2H weapon
     spellMultipliers = {},       -- { ["Fireball"] = 0.0, ["Holy Light"] = 0.12, ... }
+    -- Multipliers already included in tooltip base (still apply to SP bonus)
+    spellMultipliersIncluded = {}, -- { ["Holy Shield"] = 0.20, ... }
     coefficientBonuses = {},     -- { ["Fireball"] = 0.15, ... }
     critBonusBySchool = {},      -- { fire = 6, frost = 3, ... }
     critBonusBySpell = {},       -- { ["Fire Blast"] = 4, ... }
@@ -25,6 +29,58 @@ local computedCache = {
     physicalMultiplier1H = 0,    -- Bonus for 1H weapons (One-Handed Weapon Spec)
 }
 local computedCacheValid = false
+
+-- Forward declarations for local functions (must be declared before use)
+local EnsureComputedCache
+local BuildComputedCache
+
+-- Weapon type detection helpers
+local INVSLOT_MAINHAND = 16
+
+-- Check if player has a one-handed weapon equipped
+local function IsOneHandedWeaponEquipped()
+    -- Check main hand weapon slot
+    local itemLink = GetInventoryItemLink("player", INVSLOT_MAINHAND)
+    if not itemLink then return false end
+
+    -- Get item subclass to determine weapon type
+    local _, _, _, _, _, _, itemSubType = GetItemInfo(itemLink)
+    if not itemSubType then return false end
+
+    -- One-handed weapon types
+    local oneHandedTypes = {
+        ["One-Handed Axes"] = true,
+        ["One-Handed Maces"] = true,
+        ["One-Handed Swords"] = true,
+        ["Daggers"] = true,
+        ["Fist Weapons"] = true,
+    }
+
+    return oneHandedTypes[itemSubType] or false
+end
+
+-- Check if player has a two-handed weapon equipped
+local function IsTwoHandedWeaponEquipped()
+    local itemLink = GetInventoryItemLink("player", INVSLOT_MAINHAND)
+    if not itemLink then return false end
+
+    local _, _, _, _, _, _, itemSubType = GetItemInfo(itemLink)
+    if not itemSubType then return false end
+
+    local twoHandedTypes = {
+        ["Two-Handed Axes"] = true,
+        ["Two-Handed Maces"] = true,
+        ["Two-Handed Swords"] = true,
+        ["Polearms"] = true,
+        ["Staves"] = true,
+    }
+
+    return twoHandedTypes[itemSubType] or false
+end
+
+-- Expose weapon check functions
+SpellTooltips.Talents.IsOneHandedWeaponEquipped = IsOneHandedWeaponEquipped
+SpellTooltips.Talents.IsTwoHandedWeaponEquipped = IsTwoHandedWeaponEquipped
 
 -- Talent definitions
 -- type: "coefficient" modifies spell power coefficient, "multiplier" modifies final damage
@@ -247,16 +303,7 @@ SpellTooltips.TalentInfo = {
     -- DAMAGE/HEALING MULTIPLIERS
     -- ===================
 
-    -- Sanctity Aura: +10% Holy damage (flat, not per-rank) (Retribution tree)
-    -- Note: This is an aura that must be active, treated as talent for calculation
-    SANCTITY_AURA = {
-        tab = 3, index = 6, maxRanks = 1,
-        perRank = 0.10,
-        school = "holy",
-        type = "multiplier",
-        name = "Sanctity Aura",
-        class = "PALADIN",
-    },
+    -- Note: Sanctity Aura is tracked in AuraData.lua since it must be active to apply
 
     -- Healing Light: +4% healing to Holy Light and Flash of Light (Holy tree)
     HEALING_LIGHT = {
@@ -277,7 +324,7 @@ SpellTooltips.TalentInfo = {
         type = "multiplier",
         name = "Improved Holy Shield",
         class = "PALADIN",
-        includedInTooltip = true,  -- Don't double-apply: game already factors this into base damage
+        includedInTooltip = true,
     },
 
     -- Improved Seal of Righteousness: +3% damage per rank (Holy tree)
@@ -317,9 +364,20 @@ SpellTooltips.TalentInfo = {
         class = "PALADIN",
     },
 
+    -- One-Handed Weapon Specialization: +1% ALL damage per rank when 1H equipped (Protection tree)
+    ONE_HANDED_WEAPON_SPEC_PALADIN = {
+        tab = 2, index = 7, maxRanks = 5,
+        perRank = 0.01,
+        type = "multiplier",
+        name = "One-Handed Weapon Specialization",
+        class = "PALADIN",
+        school = "all",  -- Applies to ALL damage types
+        requires1H = true,
+    },
+
     -- Two-Handed Weapon Specialization: +2% damage with 2H weapons per rank (Retribution tree)
     TWO_HANDED_WEAPON_SPEC = {
-        tab = 3, index = 13, maxRanks = 3,
+        tab = 3, index = 7, maxRanks = 3,
         perRank = 0.02,
         type = "multiplier",
         name = "Two-Handed Weapon Specialization",
@@ -1368,15 +1426,30 @@ end
 
 -- Get damage multiplier for a specific school
 -- Returns multiplier (e.g., 1.13 for 13% bonus) and list of contributing talents
+-- Also includes "all" school bonuses (like One-Handed Weapon Specialization)
 function SpellTooltips.Talents.GetSchoolMultiplier(school)
     if not school then return 1.0, {} end
 
     EnsureComputedCache()
     school = string.lower(school)
 
-    local bonus = computedCache.schoolMultipliers[school] or 0
+    -- Get school-specific bonus + "all" school bonus
+    local schoolBonus = computedCache.schoolMultipliers[school] or 0
+    local allBonus = computedCache.schoolMultipliers["all"] or 0
+
+    -- Add weapon-conditional bonuses if appropriate weapon is equipped
+    if IsOneHandedWeaponEquipped() then
+        schoolBonus = schoolBonus + (computedCache.schoolMultipliers1H[school] or 0)
+        allBonus = allBonus + (computedCache.schoolMultipliers1H["all"] or 0)
+    elseif IsTwoHandedWeaponEquipped() then
+        schoolBonus = schoolBonus + (computedCache.schoolMultipliers2H[school] or 0)
+        allBonus = allBonus + (computedCache.schoolMultipliers2H["all"] or 0)
+    end
+
+    local totalBonus = schoolBonus + allBonus
+
     -- Return empty talent list for now (we don't track individual talents in computed cache)
-    return 1 + bonus, {}
+    return 1 + totalBonus, {}
 end
 
 -- Get spell-specific damage multiplier (for talents with "affects" list)
@@ -1388,6 +1461,17 @@ function SpellTooltips.Talents.GetSpellMultiplier(spellName)
 
     local bonus = computedCache.spellMultipliers[spellName] or 0
     return 1 + bonus, {}
+end
+
+-- Get spell-specific multiplier for talents already included in tooltip base
+-- These still need to be applied to the SP bonus portion
+function SpellTooltips.Talents.GetSpellMultiplierIncluded(spellName)
+    if not spellName then return 1.0 end
+
+    EnsureComputedCache()
+
+    local bonus = computedCache.spellMultipliersIncluded[spellName] or 0
+    return 1 + bonus
 end
 
 -- Get modified coefficient for a spell (base + talent bonus)
@@ -1409,12 +1493,15 @@ function SpellTooltips.Talents.InvalidateCache()
 end
 
 -- Build the pre-computed bonus caches (called once on login/talent change)
-local function BuildComputedCache()
+BuildComputedCache = function()
     local _, playerClass = UnitClass("player")
 
     -- Reset all computed values
     computedCache.schoolMultipliers = {}
+    computedCache.schoolMultipliers1H = {}
+    computedCache.schoolMultipliers2H = {}
     computedCache.spellMultipliers = {}
+    computedCache.spellMultipliersIncluded = {}
     computedCache.coefficientBonuses = {}
     computedCache.critBonusBySchool = {}
     computedCache.critBonusBySpell = {}
@@ -1446,10 +1533,27 @@ local function BuildComputedCache()
 
                 -- Damage multipliers
                 elseif talentInfo.type == "multiplier" then
+                    -- Talents already factored into game tooltip base damage
+                    -- Still need to apply to SP bonus, so track separately
+                    if talentInfo.includedInTooltip and talentInfo.affects then
+                        for _, spellName in ipairs(talentInfo.affects) do
+                            computedCache.spellMultipliersIncluded[spellName] =
+                                (computedCache.spellMultipliersIncluded[spellName] or 0) + bonus
+                        end
+
                     -- School-based multiplier (Fire Power, etc.)
-                    if talentInfo.school and not talentInfo.isPhysical then
-                        computedCache.schoolMultipliers[talentInfo.school] =
-                            (computedCache.schoolMultipliers[talentInfo.school] or 0) + bonus
+                    elseif talentInfo.school and not talentInfo.isPhysical then
+                        -- Check for weapon-conditional talents
+                        if talentInfo.requires1H then
+                            computedCache.schoolMultipliers1H[talentInfo.school] =
+                                (computedCache.schoolMultipliers1H[talentInfo.school] or 0) + bonus
+                        elseif talentInfo.requires2H then
+                            computedCache.schoolMultipliers2H[talentInfo.school] =
+                                (computedCache.schoolMultipliers2H[talentInfo.school] or 0) + bonus
+                        else
+                            computedCache.schoolMultipliers[talentInfo.school] =
+                                (computedCache.schoolMultipliers[talentInfo.school] or 0) + bonus
+                        end
 
                     -- Spell-specific multiplier
                     elseif talentInfo.affects then
@@ -1512,7 +1616,7 @@ local function BuildComputedCache()
 end
 
 -- Ensure computed cache is valid
-local function EnsureComputedCache()
+EnsureComputedCache = function()
     if not computedCacheValid then
         BuildComputedCache()
     end
@@ -1646,6 +1750,17 @@ function SpellTooltips.Talents.GetPhysicalMultiplier(spellName, is2HWeapon, dama
 
     local totalBonus = computedCache.physicalMultiplierGlobal
 
+    -- Add "all" school bonus (unconditional talents only)
+    totalBonus = totalBonus + (computedCache.schoolMultipliers["all"] or 0)
+
+    -- Add weapon-conditional "all" school bonuses (e.g., One-Handed Weapon Specialization)
+    if is2HWeapon then
+        totalBonus = totalBonus + (computedCache.schoolMultipliers2H["all"] or 0)
+    else
+        -- Assume 1H if not 2H
+        totalBonus = totalBonus + (computedCache.schoolMultipliers1H["all"] or 0)
+    end
+
     -- Add spell-specific bonus
     if spellName then
         totalBonus = totalBonus + (computedCache.physicalMultiplierBySpell[spellName] or 0)
@@ -1657,7 +1772,7 @@ function SpellTooltips.Talents.GetPhysicalMultiplier(spellName, is2HWeapon, dama
         totalBonus = totalBonus + (computedCache.physicalMultiplierBySchool[schoolLower] or 0)
     end
 
-    -- Add weapon-type specific bonus (pre-computed)
+    -- Add weapon-type specific physical multipliers (pre-computed)
     if is2HWeapon then
         totalBonus = totalBonus + computedCache.physicalMultiplier2H
     else
