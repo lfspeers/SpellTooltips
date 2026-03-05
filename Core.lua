@@ -624,19 +624,13 @@ local function UpdateDamageInText(text, spellPower, spellData)
 end
 
 -- Format physical ability damage breakdown
-local function FormatPhysicalBreakdown(abilityData, comboPoints)
+-- Accepts pre-calculated values to avoid duplicate API calls
+local function FormatPhysicalBreakdown(abilityData, comboPoints, breakdown, spellMultiplier)
     local lines = {}
-    local minDmg, maxDmg, ap, breakdown = addon.CalculatePhysicalDamage(abilityData, comboPoints)
 
-    if not minDmg or minDmg == 0 then
+    if not breakdown then
         return lines
     end
-
-    -- Check if using 2H weapon for talent calculations
-    local is2H = IsTwoHandedWeapon()
-
-    -- Get damage multipliers from talents (physical-specific, checks 2H requirement and school)
-    local spellMultiplier, spellTalents = Talents.GetPhysicalMultiplier(abilityData.name, is2H, abilityData.school)
 
     -- Weapon damage abilities (Sinister Strike, Backstab, etc.)
     if abilityData.weaponPct then
@@ -1026,7 +1020,7 @@ local function BuildPhysicalTooltip(tooltip, spellID, originalData)
     -- Add breakdown section
     tooltip:AddLine(" ")
 
-    local breakdownLines = FormatPhysicalBreakdown(abilityData, comboPoints)
+    local breakdownLines = FormatPhysicalBreakdown(abilityData, comboPoints, breakdown, spellMultiplier)
     for _, line in ipairs(breakdownLines) do
         tooltip:AddLine(line, 1, 1, 1)
     end

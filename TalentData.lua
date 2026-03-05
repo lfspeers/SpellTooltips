@@ -21,6 +21,8 @@ local computedCache = {
     physicalMultiplierGlobal = 0, -- Global physical damage bonus
     physicalMultiplierBySpell = {}, -- { ["Sinister Strike"] = 0.06, ... }
     physicalMultiplierBySchool = {}, -- { holy = 0.10, ... } for holy damage physical abilities
+    physicalMultiplier2H = 0,    -- Bonus for 2H weapons (Two-Handed Weapon Spec)
+    physicalMultiplier1H = 0,    -- Bonus for 1H weapons (One-Handed Weapon Spec)
 }
 local computedCacheValid = false
 
@@ -1422,6 +1424,8 @@ local function BuildComputedCache()
     computedCache.physicalMultiplierGlobal = 0
     computedCache.physicalMultiplierBySpell = {}
     computedCache.physicalMultiplierBySchool = {}
+    computedCache.physicalMultiplier2H = 0
+    computedCache.physicalMultiplier1H = 0
 
     -- Iterate through all talents once and build caches
     for key, talentInfo in pairs(SpellTooltips.TalentInfo) do
@@ -1456,7 +1460,11 @@ local function BuildComputedCache()
 
                     -- Physical damage multipliers
                     elseif talentInfo.isPhysical then
-                        if talentInfo.affects then
+                        if talentInfo.requires2H then
+                            computedCache.physicalMultiplier2H = computedCache.physicalMultiplier2H + bonus
+                        elseif talentInfo.requires1H then
+                            computedCache.physicalMultiplier1H = computedCache.physicalMultiplier1H + bonus
+                        elseif talentInfo.affects then
                             for _, spellName in ipairs(talentInfo.affects) do
                                 computedCache.physicalMultiplierBySpell[spellName] =
                                     (computedCache.physicalMultiplierBySpell[spellName] or 0) + bonus
@@ -1649,29 +1657,11 @@ function SpellTooltips.Talents.GetPhysicalMultiplier(spellName, is2HWeapon, dama
         totalBonus = totalBonus + (computedCache.physicalMultiplierBySchool[schoolLower] or 0)
     end
 
-    -- For weapon-specific talents (requires2H, requires1H), we still need to check at runtime
-    -- These are relatively rare, so we iterate only over player's class talents
-    local _, playerClass = UnitClass("player")
-
-    for key, talentInfo in pairs(SpellTooltips.TalentInfo) do
-        if talentInfo.isPhysical and (talentInfo.requires2H or talentInfo.requires1H) then
-            if not talentInfo.class or talentInfo.class == playerClass then
-                local ranks = SpellTooltips.Talents.GetTalentRanksByKey(key)
-                if ranks > 0 then
-                    local applies = false
-
-                    if talentInfo.requires2H and is2HWeapon then
-                        applies = true
-                    elseif talentInfo.requires1H and not is2HWeapon then
-                        applies = true
-                    end
-
-                    if applies then
-                        totalBonus = totalBonus + (ranks * talentInfo.perRank)
-                    end
-                end
-            end
-        end
+    -- Add weapon-type specific bonus (pre-computed)
+    if is2HWeapon then
+        totalBonus = totalBonus + computedCache.physicalMultiplier2H
+    else
+        totalBonus = totalBonus + computedCache.physicalMultiplier1H
     end
 
     return 1 + totalBonus, {}
