@@ -2,7 +2,7 @@
 ## Title: SpellTooltips
 ## Notes: Enhances spell tooltips with spellpower coefficients and damage calculations
 ## Author: SpellTooltips
-## Version: 2.3.0
+## Version: 2.4.0
 ## SavedVariables: SpellTooltipsDB
 ## X-License: MIT
 ## X-Category: Combat

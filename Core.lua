@@ -1835,7 +1835,7 @@ SlashCmdList["SPELLTOOLTIPS"] = function(msg)
         end
         print("  Change with: /stt modifier shift|ctrl|alt|none")
     else
-        print("|cFF00FF00SpellTooltips|r v2.3.0")
+        print("|cFF00FF00SpellTooltips|r v2.4.0")
         print("  /stt debug - Toggle debug mode")
         print("  /stt talents - Show detected talents")
         print("  /stt spells - Show registered spells")

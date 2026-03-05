@@ -6,7 +6,8 @@ A World of Warcraft addon for TBC Anniversary (Classic Era) that enhances spell 
 
 - **Real-time damage calculation**: Updates tooltip damage values to reflect your current spell power
 - **Talent integration**: Automatically detects and applies talent bonuses (coefficient and multiplier)
-- **Damage breakdown**: Shows base damage, spell power bonus, and talent multipliers
+- **Aura detection**: Tracks active damage-boosting buffs (Sanctity Aura, Ferocious Inspiration)
+- **Damage breakdown**: Shows base damage, spell power bonus, talent multipliers, and aura bonuses
 - **School-colored damage**: Damage values in tooltips are colored by spell school (fire, frost, arcane, etc.)
 - **Conditional talent notes**: Shows conditional bonuses like Molten Fury (+20% below 20% HP)
 
@@ -43,6 +44,9 @@ Talents: +11%
 | `/stt debug` | Toggle debug mode (shows processing info) |
 | `/stt talents` | Show detected talents and their indices |
 | `/stt spells` | Show registered spell IDs |
+| `/stt physical` | Show registered physical abilities |
+| `/stt auras` | Show active damage-boosting auras |
+| `/stt modifier` | Show/set key to view original tooltip |
 | `/stt scan 1\|2\|3` | Scan talent tree |
 | `/stt scan 1\|2\|3 save` | Scan and save to SavedVariables file |
 | `/stt test` | Show test commands |
@@ -53,7 +57,11 @@ Talents: +11%
 
 ## Supported Classes
 
-Currently supports **Mage**, **Paladin**, **Warlock**, **Priest**, **Druid**, and **Shaman**.
+Currently supports all 9 classes:
+- **Caster DPS/Healers**: Mage, Paladin, Warlock, Priest, Druid, Shaman
+- **Physical DPS**: Rogue, Hunter, Warrior
+
+Physical classes include support for weapon damage calculations, attack power scaling, combo point finishers, and stance/form modifiers.
 
 ## Spell Coefficients (Wowhead Datamined)
 
@@ -510,6 +518,23 @@ These talents modify your spell power stat directly and are already reflected in
 - Arcane Instability (+1/2/3% spell damage)
 - Mind Mastery (+up to 25% of Intellect as spell damage)
 
+## Aura Support
+
+The addon detects active party/raid buffs that affect damage calculations. These bonuses are shown in the tooltip breakdown as "Auras: +X%".
+
+### Tracked Damage Multiplier Auras
+
+| Aura | Source | Bonus | Affects |
+|------|--------|-------|---------|
+| Sanctity Aura | Paladin | +10% | Holy damage spells |
+| Ferocious Inspiration | Hunter (BM) | +3% | All damage |
+
+### Notes
+
+- **Crit auras** (Moonkin Aura, Leader of the Pack, Totem of Wrath) are already reflected in the game's `GetSpellCritChance()` / `GetCritChance()` APIs, so they are not tracked separately.
+- **Target debuffs** (Curse of Elements, Curse of Shadow) affect the target, not the player, and require a different detection system.
+- Aura detection updates automatically when buffs change via the `UNIT_AURA` event.
+
 ## File Structure
 
 ```
@@ -518,7 +543,9 @@ SpellTooltips/
 ├── Core.lua             # Main tooltip logic
 ├── Utils.lua            # Helper functions
 ├── SpellData.lua        # Spell lookup functions
-├── TalentData.lua       # Talent definitions
+├── TalentData.lua       # Talent definitions and caching
+├── AuraData.lua         # Aura/buff detection for damage multipliers
+├── Tags.lua             # Spell classification tags
 ├── SpellTests.lua       # Testing framework (combat log comparison)
 ├── Classes/
 │   ├── Mage.lua         # Mage spell coefficients
@@ -526,7 +553,10 @@ SpellTooltips/
 │   ├── Warlock.lua      # Warlock spell coefficients
 │   ├── Priest.lua       # Priest spell coefficients
 │   ├── Druid.lua        # Druid spell coefficients
-│   └── Shaman.lua       # Shaman spell coefficients
+│   ├── Shaman.lua       # Shaman spell coefficients
+│   ├── Rogue.lua        # Rogue physical abilities
+│   ├── Warrior.lua      # Warrior physical abilities
+│   └── Hunter.lua       # Hunter ranged/physical abilities
 ├── deploy.bat           # Deployment script for Windows
 └── README.md            # This file
 ```
@@ -564,6 +594,42 @@ The report compares expected crit multipliers with actual values and flags any m
 - Support for set bonuses and trinket effects
 
 ## Version History
+
+### 2.4.0
+- Added aura/buff detection for damage multipliers
+  - Sanctity Aura (+10% Holy damage)
+  - Ferocious Inspiration (+3% all damage)
+- Aura bonuses displayed in tooltip breakdown as "Auras: +X%"
+- Added `/stt auras` command to list active damage auras
+- Major performance optimization: talent bonuses pre-computed on login/talent change
+  - Lookup functions now O(1) instead of iterating 100+ talents per tooltip
+  - Fixes lag when hovering over physical abilities
+
+### 2.3.0
+- Added Hunter class support (ranged shots, stings, traps, melee abilities)
+- Hunter abilities use Ranged Attack Power (RAP) scaling
+- Added Hunter talents (Lethal Shots, Mortal Shots, Ranged Weapon Spec)
+
+### 2.2.0
+- Added Warrior class support (Arms, Fury, Protection abilities)
+- Warrior stance detection and damage modifiers (Defensive Stance -10%)
+- Shield Slam block value scaling
+- Devastate sunder stack scaling
+- Added Warrior talents (Two-Handed Spec, Impale, Cruelty)
+
+### 2.1.0
+- Added weapon type detection for normalized damage
+- Improved off-hand damage calculations with Dual Wield Specialization talents
+- Added support for abilities that hit both hands (Mutilate, Stormstrike)
+
+### 2.0.0
+- Major update: Physical damage ability support
+- Added Rogue class support (Sinister Strike, Backstab, Eviscerate, Rupture, etc.)
+- Combo point finisher scaling
+- Weapon damage percentage calculations
+- Attack power coefficient support
+- Normalized weapon damage for instant attacks
+- Added Rogue talents (Lethality, Aggression, Opportunity, Vile Poisons)
 
 ### 1.5.1
 - Fixed talent class filtering bug where talents from other classes were incorrectly applied
