@@ -8,6 +8,22 @@ SpellTooltips.Talents = {}
 local talentCache = {}
 local cacheValid = false
 
+-- Pre-computed bonus caches (built once on login/talent change)
+local computedCache = {
+    schoolMultipliers = {},      -- { fire = 0.10, frost = 0.06, ... } (bonus, not multiplier)
+    spellMultipliers = {},       -- { ["Fireball"] = 0.0, ["Holy Light"] = 0.12, ... }
+    coefficientBonuses = {},     -- { ["Fireball"] = 0.15, ... }
+    critBonusBySchool = {},      -- { fire = 6, frost = 3, ... }
+    critBonusBySpell = {},       -- { ["Fire Blast"] = 4, ... }
+    critBonusGlobal = 0,         -- Global crit bonus (all spells)
+    critDamageBySchool = {},     -- { frost = 1.0, ... } (bonus over base 1.5)
+    critDamageGlobal = 0,        -- Global crit damage bonus
+    physicalMultiplierGlobal = 0, -- Global physical damage bonus
+    physicalMultiplierBySpell = {}, -- { ["Sinister Strike"] = 0.06, ... }
+    physicalMultiplierBySchool = {}, -- { holy = 0.10, ... } for holy damage physical abilities
+}
+local computedCacheValid = false
+
 -- Talent definitions
 -- type: "coefficient" modifies spell power coefficient, "multiplier" modifies final damage
 SpellTooltips.TalentInfo = {
@@ -251,6 +267,7 @@ SpellTooltips.TalentInfo = {
     },
 
     -- Improved Holy Shield: +10% Holy Shield damage per rank (Protection tree)
+    -- Note: Game tooltip already includes this bonus in base damage value
     IMPROVED_HOLY_SHIELD = {
         tab = 2, index = 22, maxRanks = 2,
         perRank = 0.10,
@@ -258,6 +275,7 @@ SpellTooltips.TalentInfo = {
         type = "multiplier",
         name = "Improved Holy Shield",
         class = "PALADIN",
+        includedInTooltip = true,  -- Don't double-apply: game already factors this into base damage
     },
 
     -- Improved Seal of Righteousness: +3% damage per rank (Holy tree)
@@ -295,6 +313,17 @@ SpellTooltips.TalentInfo = {
         condition = "vs Humanoids, Demons, Undead, Elementals",
         name = "Crusade",
         class = "PALADIN",
+    },
+
+    -- Two-Handed Weapon Specialization: +2% damage with 2H weapons per rank (Retribution tree)
+    TWO_HANDED_WEAPON_SPEC = {
+        tab = 3, index = 13, maxRanks = 3,
+        perRank = 0.02,
+        type = "multiplier",
+        name = "Two-Handed Weapon Specialization",
+        class = "PALADIN",
+        isPhysical = true,
+        requires2H = true,
     },
 
     -- =====================
@@ -743,6 +772,136 @@ SpellTooltips.TalentInfo = {
         class = "DRUID",
     },
 
+    -- ===================
+    -- FERAL COMBAT TALENTS (Cat Form)
+    -- ===================
+
+    -- Feral Aggression: +3% Ferocious Bite damage per rank (5 ranks)
+    FERAL_AGGRESSION = {
+        tab = 2, index = 1, maxRanks = 5,
+        perRank = 0.03,
+        affects = { "Ferocious Bite" },
+        type = "multiplier",
+        name = "Feral Aggression",
+        class = "DRUID",
+    },
+
+    -- Savage Fury: +4% Claw, Rake, Mangle, Maim damage per rank (2 ranks)
+    SAVAGE_FURY = {
+        tab = 2, index = 15, maxRanks = 2,
+        perRank = 0.10,
+        affects = { "Claw", "Rake", "Mangle (Cat)", "Mangle (Bear)", "Maim" },
+        type = "multiplier",
+        name = "Savage Fury",
+        class = "DRUID",
+    },
+
+    -- Predatory Instincts: +3% crit damage in cat form per rank (5 ranks)
+    -- Note: Only applies when in Cat Form
+    PREDATORY_INSTINCTS = {
+        tab = 2, index = 24, maxRanks = 5,
+        perRank = 0.03,
+        type = "critdamage",
+        condition = "cat form only",
+        name = "Predatory Instincts",
+        class = "DRUID",
+    },
+
+    -- Naturalist: +2% physical damage per rank (5 ranks) - Restoration tree
+    -- Applies to all feral abilities
+    NATURALIST = {
+        tab = 3, index = 2, maxRanks = 5,
+        perRank = 0.02,
+        type = "physical_multiplier",
+        name = "Naturalist",
+        class = "DRUID",
+    },
+
+    -- =====================
+    -- HUNTER TALENTS
+    -- =====================
+    -- Talent trees: Tab 1 = Beast Mastery, Tab 2 = Marksmanship, Tab 3 = Survival
+
+    -- ===================
+    -- DAMAGE MULTIPLIERS
+    -- ===================
+
+    -- Improved Arcane Shot: +3% Arcane Shot damage per rank (5 ranks)
+    IMPROVED_ARCANE_SHOT = {
+        tab = 2, index = 4, maxRanks = 5,
+        perRank = 0.03,
+        affects = { "Arcane Shot" },
+        type = "multiplier",
+        name = "Improved Arcane Shot",
+        class = "HUNTER",
+    },
+
+    -- Ranged Weapon Specialization: +1% ranged damage per rank (5 ranks)
+    RANGED_WEAPON_SPEC = {
+        tab = 2, index = 22, maxRanks = 5,
+        perRank = 0.01,
+        type = "ranged_multiplier",
+        name = "Ranged Weapon Specialization",
+        class = "HUNTER",
+    },
+
+    -- Monster Slaying: +1% damage to beasts, giants, dragonkin per rank (3 ranks)
+    MONSTER_SLAYING = {
+        tab = 3, index = 4, maxRanks = 3,
+        perRank = 0.01,
+        type = "conditional",
+        condition = "vs beasts, giants, dragonkin",
+        name = "Monster Slaying",
+        class = "HUNTER",
+    },
+
+    -- Humanoid Slaying: +1% damage to humanoids per rank (3 ranks)
+    HUMANOID_SLAYING = {
+        tab = 3, index = 5, maxRanks = 3,
+        perRank = 0.01,
+        type = "conditional",
+        condition = "vs humanoids",
+        name = "Humanoid Slaying",
+        class = "HUNTER",
+    },
+
+    -- ===================
+    -- CRIT CHANCE TALENTS
+    -- ===================
+
+    -- Lethal Shots: +1% ranged crit per rank (5 ranks)
+    LETHAL_SHOTS = {
+        tab = 2, index = 3, maxRanks = 5,
+        perRank = 0.01,
+        type = "crit",
+        isRanged = true,
+        name = "Lethal Shots",
+        class = "HUNTER",
+    },
+
+    -- Killer Instinct: +1% crit per rank (3 ranks)
+    KILLER_INSTINCT = {
+        tab = 3, index = 16, maxRanks = 3,
+        perRank = 0.01,
+        type = "crit",
+        name = "Killer Instinct",
+        class = "HUNTER",
+    },
+
+    -- ===================
+    -- CRIT DAMAGE TALENTS
+    -- ===================
+
+    -- Mortal Shots: +6% ranged crit damage per rank (5 ranks = +30%)
+    MORTAL_SHOTS = {
+        tab = 2, index = 9, maxRanks = 5,
+        perRank = 0.06,
+        type = "critdamage",
+        isRanged = true,
+        name = "Mortal Shots",
+        class = "HUNTER",
+    },
+
     -- =====================
     -- SHAMAN TALENTS
     -- =====================
@@ -856,6 +1015,315 @@ SpellTooltips.TalentInfo = {
         class = "SHAMAN",
     },
 
+    -- ===================
+    -- ENHANCEMENT SHAMAN TALENTS (Physical)
+    -- ===================
+
+    -- Weapon Mastery: +2% melee damage per rank (all weapons)
+    WEAPON_MASTERY = {
+        tab = 2, index = 13, maxRanks = 5,
+        perRank = 0.02,
+        type = "multiplier",
+        name = "Weapon Mastery",
+        class = "SHAMAN",
+        isPhysical = true,
+    },
+
+    -- Dual Wield Specialization (Shaman): +3% off-hand damage per rank
+    DUAL_WIELD_SPEC_SHAMAN = {
+        tab = 2, index = 19, maxRanks = 3,
+        perRank = 0.03,
+        type = "multiplier",
+        name = "Dual Wield Specialization",
+        class = "SHAMAN",
+        isPhysical = true,
+        offhandOnly = true,
+    },
+
+    -- Elemental Weapons: +10% Windfury/Flametongue/Frostbrand damage per rank
+    ELEMENTAL_WEAPONS = {
+        tab = 2, index = 10, maxRanks = 3,
+        perRank = 0.10,
+        affects = { "Windfury Weapon", "Flametongue Weapon", "Frostbrand Weapon" },
+        type = "multiplier",
+        name = "Elemental Weapons",
+        class = "SHAMAN",
+        isPhysical = true,
+    },
+
+    -- Unleashed Rage: +2% AP after melee crit per rank (buff)
+    UNLEASHED_RAGE = {
+        tab = 2, index = 21, maxRanks = 5,
+        perRank = 0.02,
+        type = "conditional",
+        condition = "after melee critical strike (party buff)",
+        name = "Unleashed Rage",
+        class = "SHAMAN",
+        isPhysical = true,
+    },
+
+    -- Mental Quickness: +10% of AP as spell damage per rank
+    MENTAL_QUICKNESS = {
+        tab = 2, index = 15, maxRanks = 3,
+        perRank = 0.10,
+        type = "conditional",
+        condition = "adds 10% AP as spell damage",
+        name = "Mental Quickness",
+        class = "SHAMAN",
+    },
+
+    -- =====================
+    -- WARRIOR TALENTS
+    -- =====================
+    -- Talent trees: Tab 1 = Arms, Tab 2 = Fury, Tab 3 = Protection
+
+    -- ===================
+    -- DAMAGE MULTIPLIERS
+    -- ===================
+
+    -- Two-Handed Weapon Specialization (Arms): +2% damage with 2H per rank
+    TWO_HANDED_WEAPON_SPEC_WARRIOR = {
+        tab = 1, index = 19, maxRanks = 5,
+        perRank = 0.02,
+        type = "multiplier",
+        name = "Two-Handed Weapon Specialization",
+        class = "WARRIOR",
+        isPhysical = true,
+        requires2H = true,
+    },
+
+    -- One-Handed Weapon Specialization (Arms): +2% damage with 1H per rank
+    ONE_HANDED_WEAPON_SPEC = {
+        tab = 1, index = 23, maxRanks = 5,
+        perRank = 0.02,
+        type = "multiplier",
+        name = "One-Handed Weapon Specialization",
+        class = "WARRIOR",
+        isPhysical = true,
+        requires1H = true,
+    },
+
+    -- Dual Wield Specialization (Fury): +5% off-hand damage per rank
+    DUAL_WIELD_SPEC_WARRIOR = {
+        tab = 2, index = 18, maxRanks = 5,
+        perRank = 0.05,
+        type = "multiplier",
+        name = "Dual Wield Specialization",
+        class = "WARRIOR",
+        isPhysical = true,
+        offhandOnly = true,
+    },
+
+    -- ===================
+    -- CRIT DAMAGE TALENTS
+    -- ===================
+
+    -- Impale (Arms): +10% crit damage per rank
+    IMPALE = {
+        tab = 1, index = 10, maxRanks = 2,
+        perRank = 0.10,
+        type = "critdamage",
+        name = "Impale",
+        class = "WARRIOR",
+        isPhysical = true,
+    },
+
+    -- ===================
+    -- CRIT CHANCE TALENTS
+    -- ===================
+
+    -- Improved Overpower (Arms): +25% crit chance to Overpower per rank
+    IMPROVED_OVERPOWER = {
+        tab = 1, index = 7, maxRanks = 2,
+        perRank = 0.25,
+        affects = { "Overpower" },
+        type = "crit",
+        name = "Improved Overpower",
+        class = "WARRIOR",
+        isPhysical = true,
+    },
+
+    -- Cruelty (Fury): +1% crit to all attacks per rank
+    CRUELTY = {
+        tab = 2, index = 3, maxRanks = 5,
+        perRank = 0.01,
+        type = "crit",
+        name = "Cruelty",
+        class = "WARRIOR",
+        isPhysical = true,
+    },
+
+    -- ===================
+    -- CONDITIONAL MULTIPLIERS
+    -- ===================
+
+    -- Enrage (Fury): +5% damage after crit per rank
+    ENRAGE = {
+        tab = 2, index = 14, maxRanks = 5,
+        perRank = 0.05,
+        type = "conditional",
+        condition = "for 12s after being crit",
+        name = "Enrage",
+        class = "WARRIOR",
+        isPhysical = true,
+    },
+
+    -- Death Wish (Fury): +20% damage active ability
+    DEATH_WISH = {
+        tab = 2, index = 17, maxRanks = 1,
+        perRank = 0.20,
+        type = "conditional",
+        condition = "when Death Wish is active",
+        name = "Death Wish",
+        class = "WARRIOR",
+        isPhysical = true,
+    },
+
+    -- Rampage (Fury): +AP stacking buff after crit
+    RAMPAGE_TALENT = {
+        tab = 2, index = 21, maxRanks = 1,
+        perRank = 0.0, -- AP buff, not % modifier
+        type = "conditional",
+        condition = "+50 AP stacking (5x) after melee crit",
+        name = "Rampage",
+        class = "WARRIOR",
+        isPhysical = true,
+    },
+
+    -- ===================
+    -- PROTECTION TALENTS
+    -- ===================
+
+    -- Shield Mastery (Protection): +10% block value per rank
+    SHIELD_MASTERY = {
+        tab = 3, index = 8, maxRanks = 3,
+        perRank = 0.10,
+        type = "multiplier",
+        name = "Shield Mastery",
+        class = "WARRIOR",
+        isPhysical = true,
+        affectsBlockValue = true,
+    },
+
+    -- =====================
+    -- ROGUE TALENTS
+    -- =====================
+    -- Talent trees: Tab 1 = Assassination, Tab 2 = Combat, Tab 3 = Subtlety
+    -- Note: Talent indices need verification in-game with /stt scan
+
+    -- ===================
+    -- CRIT CHANCE TALENTS
+    -- ===================
+
+    -- Malice: +1% crit to all abilities per rank
+    MALICE = {
+        tab = 1, index = 5, maxRanks = 5,
+        perRank = 0.01,
+        type = "crit",
+        name = "Malice",
+        class = "ROGUE",
+        isPhysical = true,
+    },
+
+    -- ===================
+    -- CRIT DAMAGE TALENTS
+    -- ===================
+
+    -- Lethality: +6% crit damage per rank to physical crits
+    LETHALITY = {
+        tab = 1, index = 11, maxRanks = 5,
+        perRank = 0.06,
+        type = "critdamage",
+        name = "Lethality",
+        class = "ROGUE",
+        isPhysical = true,
+    },
+
+    -- ===================
+    -- DAMAGE MULTIPLIERS
+    -- ===================
+
+    -- Aggression: +2% damage to Sinister Strike, Backstab, Eviscerate per rank
+    AGGRESSION = {
+        tab = 2, index = 15, maxRanks = 3,
+        perRank = 0.02,
+        affects = { "Sinister Strike", "Backstab", "Eviscerate" },
+        type = "multiplier",
+        name = "Aggression",
+        class = "ROGUE",
+        isPhysical = true,
+    },
+
+    -- Opportunity: +4% damage to Backstab, Mutilate, Garrote, Ambush per rank
+    OPPORTUNITY = {
+        tab = 3, index = 6, maxRanks = 5,
+        perRank = 0.04,
+        affects = { "Backstab", "Mutilate", "Garrote", "Ambush" },
+        type = "multiplier",
+        name = "Opportunity",
+        class = "ROGUE",
+        isPhysical = true,
+    },
+
+    -- Vile Poisons: +4% Envenom/Instant Poison damage per rank
+    VILE_POISONS = {
+        tab = 1, index = 15, maxRanks = 5,
+        perRank = 0.04,
+        affects = { "Envenom" },
+        type = "multiplier",
+        name = "Vile Poisons",
+        class = "ROGUE",
+        isPhysical = true,
+    },
+
+    -- Dual Wield Specialization: +2% off-hand damage per rank
+    DUAL_WIELD_SPEC = {
+        tab = 2, index = 6, maxRanks = 5,
+        perRank = 0.02,
+        type = "multiplier",
+        name = "Dual Wield Specialization",
+        class = "ROGUE",
+        isPhysical = true,
+        offhandOnly = true,
+    },
+
+    -- ===================
+    -- CONDITIONAL MULTIPLIERS
+    -- ===================
+
+    -- Murder: +2% damage vs humanoids, giants, beasts, dragonkin per rank
+    MURDER = {
+        tab = 1, index = 9, maxRanks = 2,
+        perRank = 0.02,
+        type = "conditional",
+        condition = "vs Humanoids, Giants, Beasts, Dragonkin",
+        name = "Murder",
+        class = "ROGUE",
+        isPhysical = true,
+    },
+
+    -- Find Weakness: +2% damage per rank after opener (Ambush, Garrote, Cheap Shot)
+    FIND_WEAKNESS = {
+        tab = 1, index = 20, maxRanks = 5,
+        perRank = 0.02,
+        type = "conditional",
+        condition = "for 10s after Ambush, Garrote, or Cheap Shot",
+        name = "Find Weakness",
+        class = "ROGUE",
+        isPhysical = true,
+    },
+
+    -- Shadowstep: +20% damage for 10s after use
+    SHADOWSTEP = {
+        tab = 3, index = 21, maxRanks = 1,
+        perRank = 0.20,
+        type = "conditional",
+        condition = "for 10s after Shadowstep",
+        name = "Shadowstep",
+        class = "ROGUE",
+        isPhysical = true,
+    },
+
 }
 
 -- Get the number of points in a specific talent
@@ -890,21 +1358,10 @@ end
 
 -- Get coefficient bonus for a specific spell name
 function SpellTooltips.Talents.GetCoefficientBonus(spellName)
-    local totalBonus = 0
+    if not spellName then return 0 end
 
-    for key, talentInfo in pairs(SpellTooltips.TalentInfo) do
-        if talentInfo.type == "coefficient" and talentInfo.affects then
-            for _, affectedSpell in ipairs(talentInfo.affects) do
-                if affectedSpell == spellName then
-                    local ranks = SpellTooltips.Talents.GetTalentRanksByKey(key)
-                    totalBonus = totalBonus + (ranks * talentInfo.perRank)
-                    break
-                end
-            end
-        end
-    end
-
-    return totalBonus
+    EnsureComputedCache()
+    return computedCache.coefficientBonuses[spellName] or 0
 end
 
 -- Get damage multiplier for a specific school
@@ -912,27 +1369,12 @@ end
 function SpellTooltips.Talents.GetSchoolMultiplier(school)
     if not school then return 1.0, {} end
 
-    local totalBonus = 0
-    local contributingTalents = {}
+    EnsureComputedCache()
     school = string.lower(school)
 
-    for key, talentInfo in pairs(SpellTooltips.TalentInfo) do
-        if talentInfo.type == "multiplier" and talentInfo.school == school then
-            local ranks = SpellTooltips.Talents.GetTalentRanksByKey(key)
-            if ranks > 0 then
-                local bonus = ranks * talentInfo.perRank
-                totalBonus = totalBonus + bonus
-                table.insert(contributingTalents, {
-                    name = talentInfo.name,
-                    bonus = bonus,
-                    ranks = ranks,
-                    maxRanks = talentInfo.maxRanks,
-                })
-            end
-        end
-    end
-
-    return 1 + totalBonus, contributingTalents
+    local bonus = computedCache.schoolMultipliers[school] or 0
+    -- Return empty talent list for now (we don't track individual talents in computed cache)
+    return 1 + bonus, {}
 end
 
 -- Get spell-specific damage multiplier (for talents with "affects" list)
@@ -940,32 +1382,10 @@ end
 function SpellTooltips.Talents.GetSpellMultiplier(spellName)
     if not spellName then return 1.0, {} end
 
-    local totalBonus = 0
-    local contributingTalents = {}
+    EnsureComputedCache()
 
-    for key, talentInfo in pairs(SpellTooltips.TalentInfo) do
-        if talentInfo.type == "multiplier" and talentInfo.affects then
-            -- Check if this talent affects the given spell
-            for _, affectedSpell in ipairs(talentInfo.affects) do
-                if affectedSpell == spellName then
-                    local ranks = SpellTooltips.Talents.GetTalentRanksByKey(key)
-                    if ranks > 0 then
-                        local bonus = ranks * talentInfo.perRank
-                        totalBonus = totalBonus + bonus
-                        table.insert(contributingTalents, {
-                            name = talentInfo.name,
-                            bonus = bonus,
-                            ranks = ranks,
-                            maxRanks = talentInfo.maxRanks,
-                        })
-                    end
-                    break
-                end
-            end
-        end
-    end
-
-    return 1 + totalBonus, contributingTalents
+    local bonus = computedCache.spellMultipliers[spellName] or 0
+    return 1 + bonus, {}
 end
 
 -- Get modified coefficient for a spell (base + talent bonus)
@@ -983,6 +1403,111 @@ end
 function SpellTooltips.Talents.InvalidateCache()
     talentCache = {}
     cacheValid = false
+    computedCacheValid = false
+end
+
+-- Build the pre-computed bonus caches (called once on login/talent change)
+local function BuildComputedCache()
+    local _, playerClass = UnitClass("player")
+
+    -- Reset all computed values
+    computedCache.schoolMultipliers = {}
+    computedCache.spellMultipliers = {}
+    computedCache.coefficientBonuses = {}
+    computedCache.critBonusBySchool = {}
+    computedCache.critBonusBySpell = {}
+    computedCache.critBonusGlobal = 0
+    computedCache.critDamageBySchool = {}
+    computedCache.critDamageGlobal = 0
+    computedCache.physicalMultiplierGlobal = 0
+    computedCache.physicalMultiplierBySpell = {}
+    computedCache.physicalMultiplierBySchool = {}
+
+    -- Iterate through all talents once and build caches
+    for key, talentInfo in pairs(SpellTooltips.TalentInfo) do
+        -- Skip talents from other classes
+        if talentInfo.class and talentInfo.class ~= playerClass then
+            -- Skip
+        else
+            local ranks = SpellTooltips.Talents.GetTalentRanks(talentInfo.tab, talentInfo.index)
+            if ranks > 0 then
+                local bonus = ranks * talentInfo.perRank
+
+                -- Coefficient bonuses (affects specific spells)
+                if talentInfo.type == "coefficient" and talentInfo.affects then
+                    for _, spellName in ipairs(talentInfo.affects) do
+                        computedCache.coefficientBonuses[spellName] =
+                            (computedCache.coefficientBonuses[spellName] or 0) + bonus
+                    end
+
+                -- Damage multipliers
+                elseif talentInfo.type == "multiplier" then
+                    -- School-based multiplier (Fire Power, etc.)
+                    if talentInfo.school and not talentInfo.isPhysical then
+                        computedCache.schoolMultipliers[talentInfo.school] =
+                            (computedCache.schoolMultipliers[talentInfo.school] or 0) + bonus
+
+                    -- Spell-specific multiplier
+                    elseif talentInfo.affects then
+                        for _, spellName in ipairs(talentInfo.affects) do
+                            computedCache.spellMultipliers[spellName] =
+                                (computedCache.spellMultipliers[spellName] or 0) + bonus
+                        end
+
+                    -- Physical damage multipliers
+                    elseif talentInfo.isPhysical then
+                        if talentInfo.affects then
+                            for _, spellName in ipairs(talentInfo.affects) do
+                                computedCache.physicalMultiplierBySpell[spellName] =
+                                    (computedCache.physicalMultiplierBySpell[spellName] or 0) + bonus
+                            end
+                        elseif talentInfo.school then
+                            computedCache.physicalMultiplierBySchool[talentInfo.school] =
+                                (computedCache.physicalMultiplierBySchool[talentInfo.school] or 0) + bonus
+                        end
+                    end
+
+                -- Physical multiplier type (Naturalist, etc.)
+                elseif talentInfo.type == "physical_multiplier" then
+                    computedCache.physicalMultiplierGlobal = computedCache.physicalMultiplierGlobal + bonus
+
+                -- Crit chance bonuses (multiply by 100 to convert to percentage)
+                elseif talentInfo.type == "crit" then
+                    local critBonus = bonus * 100
+                    if talentInfo.school then
+                        computedCache.critBonusBySchool[talentInfo.school] =
+                            (computedCache.critBonusBySchool[talentInfo.school] or 0) + critBonus
+                    elseif talentInfo.affects then
+                        for _, spellName in ipairs(talentInfo.affects) do
+                            computedCache.critBonusBySpell[spellName] =
+                                (computedCache.critBonusBySpell[spellName] or 0) + critBonus
+                        end
+                    else
+                        -- Global crit bonus (no school or affects restriction)
+                        computedCache.critBonusGlobal = computedCache.critBonusGlobal + critBonus
+                    end
+
+                -- Crit damage bonuses
+                elseif talentInfo.type == "critdamage" then
+                    if talentInfo.school then
+                        computedCache.critDamageBySchool[talentInfo.school] =
+                            (computedCache.critDamageBySchool[talentInfo.school] or 0) + bonus
+                    else
+                        computedCache.critDamageGlobal = computedCache.critDamageGlobal + bonus
+                    end
+                end
+            end
+        end
+    end
+
+    computedCacheValid = true
+end
+
+-- Ensure computed cache is valid
+local function EnsureComputedCache()
+    if not computedCacheValid then
+        BuildComputedCache()
+    end
 end
 
 -- Validate/refresh the cache
@@ -990,10 +1515,13 @@ function SpellTooltips.Talents.RefreshCache()
     talentCache = {}
     cacheValid = true
 
-    -- Pre-populate cache for all tracked talents
+    -- Pre-populate cache for all tracked talents and build computed cache
     for key, talentInfo in pairs(SpellTooltips.TalentInfo) do
         SpellTooltips.Talents.GetTalentRanks(talentInfo.tab, talentInfo.index)
     end
+
+    -- Build the computed bonus caches
+    BuildComputedCache()
 end
 
 -- Calculate full spell damage with talents
@@ -1086,68 +1614,81 @@ end
 -- Get crit chance bonus from talents for a specific spell/school
 -- Returns total crit bonus as a percentage (e.g., 6.0 for +6%)
 function SpellTooltips.Talents.GetCritChanceBonus(spellName, school)
-    local totalBonus = 0
-    local schoolLower = school and string.lower(school) or nil
+    EnsureComputedCache()
+
+    local totalBonus = computedCache.critBonusGlobal
+
+    if school then
+        local schoolLower = string.lower(school)
+        totalBonus = totalBonus + (computedCache.critBonusBySchool[schoolLower] or 0)
+    end
+
+    if spellName then
+        totalBonus = totalBonus + (computedCache.critBonusBySpell[spellName] or 0)
+    end
+
+    return totalBonus
+end
+
+-- Get physical ability multiplier (checks for weapon-type requirements)
+-- Also includes school-based multipliers for abilities that deal spell damage (e.g., Holy)
+-- Returns multiplier (e.g., 1.16 for 16% bonus) and list of contributing talents
+function SpellTooltips.Talents.GetPhysicalMultiplier(spellName, is2HWeapon, damageSchool)
+    EnsureComputedCache()
+
+    local totalBonus = computedCache.physicalMultiplierGlobal
+
+    -- Add spell-specific bonus
+    if spellName then
+        totalBonus = totalBonus + (computedCache.physicalMultiplierBySpell[spellName] or 0)
+    end
+
+    -- Add school-based bonus (e.g., Sanctity Aura for Holy damage abilities)
+    if damageSchool then
+        local schoolLower = string.lower(damageSchool)
+        totalBonus = totalBonus + (computedCache.physicalMultiplierBySchool[schoolLower] or 0)
+    end
+
+    -- For weapon-specific talents (requires2H, requires1H), we still need to check at runtime
+    -- These are relatively rare, so we iterate only over player's class talents
+    local _, playerClass = UnitClass("player")
 
     for key, talentInfo in pairs(SpellTooltips.TalentInfo) do
-        if talentInfo.type == "crit" then
-            local ranks = SpellTooltips.Talents.GetTalentRanksByKey(key)
-            if ranks > 0 then
-                local applies = false
+        if talentInfo.isPhysical and (talentInfo.requires2H or talentInfo.requires1H) then
+            if not talentInfo.class or talentInfo.class == playerClass then
+                local ranks = SpellTooltips.Talents.GetTalentRanksByKey(key)
+                if ranks > 0 then
+                    local applies = false
 
-                -- Spell-specific crit (e.g., Arcane Impact, Incineration, Improved Frostbolt)
-                if talentInfo.affects then
-                    for _, affectedSpell in ipairs(talentInfo.affects) do
-                        if affectedSpell == spellName then
-                            applies = true
-                            break
-                        end
+                    if talentInfo.requires2H and is2HWeapon then
+                        applies = true
+                    elseif talentInfo.requires1H and not is2HWeapon then
+                        applies = true
                     end
-                -- School-wide crit (e.g., Critical Mass)
-                elseif talentInfo.school and schoolLower and talentInfo.school == schoolLower then
-                    applies = true
-                -- Global crit bonus (e.g., Arcane Instability)
-                elseif not talentInfo.school and not talentInfo.affects then
-                    applies = true
-                end
 
-                if applies then
-                    totalBonus = totalBonus + (ranks * talentInfo.perRank * 100)
+                    if applies then
+                        totalBonus = totalBonus + (ranks * talentInfo.perRank)
+                    end
                 end
             end
         end
     end
 
-    return totalBonus
+    return 1 + totalBonus, {}
 end
 
 -- Get crit damage multiplier for a school
 -- Base crit damage in TBC is 150% (1.5x multiplier)
 -- Returns total multiplier (e.g., 2.5 for 250% crit damage with Ice Shards)
 function SpellTooltips.Talents.GetCritDamageMultiplier(school)
+    EnsureComputedCache()
+
     local baseCritMultiplier = 1.5  -- 150% base crit damage in TBC
-    local bonusMultiplier = 0
-    local schoolLower = school and string.lower(school) or nil
+    local bonusMultiplier = computedCache.critDamageGlobal
 
-    for key, talentInfo in pairs(SpellTooltips.TalentInfo) do
-        if talentInfo.type == "critdamage" then
-            local ranks = SpellTooltips.Talents.GetTalentRanksByKey(key)
-            if ranks > 0 then
-                local applies = false
-
-                -- School-specific crit damage (e.g., Ice Shards)
-                if talentInfo.school and schoolLower and talentInfo.school == schoolLower then
-                    applies = true
-                -- Global crit damage bonus (e.g., Spell Power)
-                elseif not talentInfo.school then
-                    applies = true
-                end
-
-                if applies then
-                    bonusMultiplier = bonusMultiplier + (ranks * talentInfo.perRank)
-                end
-            end
-        end
+    if school then
+        local schoolLower = string.lower(school)
+        bonusMultiplier = bonusMultiplier + (computedCache.critDamageBySchool[schoolLower] or 0)
     end
 
     return baseCritMultiplier + bonusMultiplier
