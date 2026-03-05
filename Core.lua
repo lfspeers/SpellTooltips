@@ -16,6 +16,10 @@ frame:RegisterEvent("CHARACTER_POINTS_CHANGED")
 frame:RegisterEvent("PLAYER_TALENT_UPDATE")
 frame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
 frame:RegisterEvent("UNIT_AURA")
+-- Stats cache invalidation events
+frame:RegisterEvent("UNIT_ATTACK_POWER")
+frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
+frame:RegisterEvent("UNIT_DAMAGE")
 
 -- Track if we've already processed this tooltip
 local tooltipProcessed = false
@@ -74,12 +78,26 @@ local function GetMainHandSpeed()
     return speed or 2.0
 end
 
--- Check if using two-handed weapon
+-- Check if using two-handed weapon (cached)
+local is2HCache = { valid = false, value = false }
+
+local function InvalidateWeaponCache()
+    is2HCache.valid = false
+end
+
 local function IsTwoHandedWeapon()
+    if is2HCache.valid then
+        return is2HCache.value
+    end
     local itemID = GetInventoryItemID("player", 16) -- INVSLOT_MAINHAND
-    if not itemID then return false end
-    local _, _, _, _, _, _, _, _, itemEquipLoc = GetItemInfo(itemID)
-    return itemEquipLoc == "INVTYPE_2HWEAPON"
+    if not itemID then
+        is2HCache.value = false
+    else
+        local _, _, _, _, _, _, _, _, itemEquipLoc = GetItemInfo(itemID)
+        is2HCache.value = (itemEquipLoc == "INVTYPE_2HWEAPON")
+    end
+    is2HCache.valid = true
+    return is2HCache.value
 end
 
 -- Check if main hand is a dagger (for Backstab, Ambush, Mutilate)
@@ -1474,6 +1492,19 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         if SpellTooltips.Auras then
             SpellTooltips.Auras.InvalidateCache()
         end
+        -- Invalidate stance cache for warriors
+        if SpellTooltips.InvalidateStanceCache then
+            SpellTooltips.InvalidateStanceCache()
+        end
+
+    elseif event == "UNIT_ATTACK_POWER" or event == "UNIT_DAMAGE" then
+        if arg1 == "player" then
+            SpellTooltips.InvalidateStatsCache()
+        end
+
+    elseif event == "PLAYER_EQUIPMENT_CHANGED" then
+        SpellTooltips.InvalidateStatsCache()
+        InvalidateWeaponCache()
     end
 end)
 
