@@ -13,3 +13,5 @@ deploy.bat
 # Build artifacts
 *.zip
 
+# Development planning notes
+PLAN_*.md
