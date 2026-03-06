@@ -4,8 +4,6 @@
 
 SpellTooltips = SpellTooltips or {}
 
-local T = SpellTooltips.Tags
-
 local PaladinSpells = {
     -- Avenger's Shield (all ranks)
     -- Coefficient: ~9.5% (1.0s cast / 3.5 / 3 targets)
@@ -82,19 +80,48 @@ local PaladinSpells = {
     -- Seal of Righteousness (all ranks)
     -- Melee proc: SP * 0.092 * WeaponSpeed (1H) or SP * 0.108 * WeaponSpeed (2H)
     -- Plus weapon damage component: 0.03 * AvgWeaponDmg
-    -- Judgement: Base + 73% SP
-    [20154] = { name = "Seal of Righteousness", school = "holy", isSeal = true, baseCoeff1H = 0.092, baseCoeff2H = 0.108, weaponDmgCoeff = 0, judgementCoef = 0.73 },
-    [20287] = { name = "Seal of Righteousness", school = "holy", isSeal = true, baseCoeff1H = 0.092, baseCoeff2H = 0.108, weaponDmgCoeff = 0, judgementCoef = 0.73 },
-    [20288] = { name = "Seal of Righteousness", school = "holy", isSeal = true, baseCoeff1H = 0.092, baseCoeff2H = 0.108, weaponDmgCoeff = 0, judgementCoef = 0.73 },
-    [20289] = { name = "Seal of Righteousness", school = "holy", isSeal = true, baseCoeff1H = 0.092, baseCoeff2H = 0.108, weaponDmgCoeff = 0, judgementCoef = 0.73 },
-    [20290] = { name = "Seal of Righteousness", school = "holy", isSeal = true, baseCoeff1H = 0.092, baseCoeff2H = 0.108, weaponDmgCoeff = 0, judgementCoef = 0.73 },
-    [20291] = { name = "Seal of Righteousness", school = "holy", isSeal = true, baseCoeff1H = 0.092, baseCoeff2H = 0.108, weaponDmgCoeff = 0, judgementCoef = 0.73 },
-    [20292] = { name = "Seal of Righteousness", school = "holy", isSeal = true, baseCoeff1H = 0.092, baseCoeff2H = 0.108, weaponDmgCoeff = 0, judgementCoef = 0.73 },
-    [20293] = { name = "Seal of Righteousness", school = "holy", isSeal = true, baseCoeff1H = 0.092, baseCoeff2H = 0.108, weaponDmgCoeff = 0, judgementCoef = 0.73 },
-    [27155] = { name = "Seal of Righteousness", school = "holy", isSeal = true, baseCoeff1H = 0.092, baseCoeff2H = 0.108, weaponDmgCoeff = 0, judgementCoef = 0.73 },
+    -- Judgement: Base + 71.4% SP (confirmed via Elitist Jerks / Wowhead TBC)
+    [20154] = { name = "Seal of Righteousness", school = "holy", isSeal = true, baseCoeff1H = 0.092, baseCoeff2H = 0.108, weaponDamagePercent = 0.03, judgementCoef = 0.714 },
+    [20287] = { name = "Seal of Righteousness", school = "holy", isSeal = true, baseCoeff1H = 0.092, baseCoeff2H = 0.108, weaponDamagePercent = 0.03, judgementCoef = 0.714 },
+    [20288] = { name = "Seal of Righteousness", school = "holy", isSeal = true, baseCoeff1H = 0.092, baseCoeff2H = 0.108, weaponDamagePercent = 0.03, judgementCoef = 0.714 },
+    [20289] = { name = "Seal of Righteousness", school = "holy", isSeal = true, baseCoeff1H = 0.092, baseCoeff2H = 0.108, weaponDamagePercent = 0.03, judgementCoef = 0.714 },
+    [20290] = { name = "Seal of Righteousness", school = "holy", isSeal = true, baseCoeff1H = 0.092, baseCoeff2H = 0.108, weaponDamagePercent = 0.03, judgementCoef = 0.714 },
+    [20291] = { name = "Seal of Righteousness", school = "holy", isSeal = true, baseCoeff1H = 0.092, baseCoeff2H = 0.108, weaponDamagePercent = 0.03, judgementCoef = 0.714 },
+    [20292] = { name = "Seal of Righteousness", school = "holy", isSeal = true, baseCoeff1H = 0.092, baseCoeff2H = 0.108, weaponDamagePercent = 0.03, judgementCoef = 0.714 },
+    [20293] = { name = "Seal of Righteousness", school = "holy", isSeal = true, baseCoeff1H = 0.092, baseCoeff2H = 0.108, weaponDamagePercent = 0.03, judgementCoef = 0.714 },
+    [27155] = { name = "Seal of Righteousness", school = "holy", isSeal = true, baseCoeff1H = 0.092, baseCoeff2H = 0.108, weaponDamagePercent = 0.03, judgementCoef = 0.714 },
+
+    -- Seal of Command (all ranks)
+    -- Melee proc: 70% weapon damage as Holy + 29% SP, 7 PPM
+    -- Judgement: Base + 43% SP (no AP scaling), uses melee crit
+    -- Stunned bonus: Additional 70% weapon damage + 29% SP vs stunned/incapacitated
+    [20375] = { name = "Seal of Command", school = "holy", isSeal = true, isPhysical = true, weaponDamagePercent = 0.70, spCoeff = 0.29, judgementCoef = 0.43, stunnedWeaponCoeff = 0.70, stunnedSpCoeff = 0.29, ppm = 7 },
+    [20915] = { name = "Seal of Command", school = "holy", isSeal = true, isPhysical = true, weaponDamagePercent = 0.70, spCoeff = 0.29, judgementCoef = 0.43, stunnedWeaponCoeff = 0.70, stunnedSpCoeff = 0.29, ppm = 7 },
+    [20918] = { name = "Seal of Command", school = "holy", isSeal = true, isPhysical = true, weaponDamagePercent = 0.70, spCoeff = 0.29, judgementCoef = 0.43, stunnedWeaponCoeff = 0.70, stunnedSpCoeff = 0.29, ppm = 7 },
+    [20919] = { name = "Seal of Command", school = "holy", isSeal = true, isPhysical = true, weaponDamagePercent = 0.70, spCoeff = 0.29, judgementCoef = 0.43, stunnedWeaponCoeff = 0.70, stunnedSpCoeff = 0.29, ppm = 7 },
+    [20920] = { name = "Seal of Command", school = "holy", isSeal = true, isPhysical = true, weaponDamagePercent = 0.70, spCoeff = 0.29, judgementCoef = 0.43, stunnedWeaponCoeff = 0.70, stunnedSpCoeff = 0.29, ppm = 7 },
+    [27170] = { name = "Seal of Command", school = "holy", isSeal = true, isPhysical = true, weaponDamagePercent = 0.70, spCoeff = 0.29, judgementCoef = 0.43, stunnedWeaponCoeff = 0.70, stunnedSpCoeff = 0.29, ppm = 7 },
+
+    -- Seal of Light (all ranks)
+    -- Melee proc: Heals attacker, 15 PPM
+    -- Healing scales with AP and SP
+    [20165] = { name = "Seal of Light", school = "holy", isSeal = true, isUtilitySeal = true, ppm = 15, coefficient = 0.15, apCoefficient = 0.15 },
+    [20347] = { name = "Seal of Light", school = "holy", isSeal = true, isUtilitySeal = true, ppm = 15, coefficient = 0.15, apCoefficient = 0.15 },
+    [20348] = { name = "Seal of Light", school = "holy", isSeal = true, isUtilitySeal = true, ppm = 15, coefficient = 0.15, apCoefficient = 0.15 },
+    [20349] = { name = "Seal of Light", school = "holy", isSeal = true, isUtilitySeal = true, ppm = 15, coefficient = 0.15, apCoefficient = 0.15 },
+    [27160] = { name = "Seal of Light", school = "holy", isSeal = true, isUtilitySeal = true, ppm = 15, coefficient = 0.15, apCoefficient = 0.15 },
+
+    -- Seal of Wisdom (all ranks)
+    -- Melee proc: Restores mana to attacker, 15 PPM
+    [20166] = { name = "Seal of Wisdom", school = "holy", isSeal = true, isUtilitySeal = true, ppm = 15 },
+    [20356] = { name = "Seal of Wisdom", school = "holy", isSeal = true, isUtilitySeal = true, ppm = 15 },
+    [20357] = { name = "Seal of Wisdom", school = "holy", isSeal = true, isUtilitySeal = true, ppm = 15 },
+    [27166] = { name = "Seal of Wisdom", school = "holy", isSeal = true, isUtilitySeal = true, ppm = 15 },
+
+    -- Crusader Strike (Retribution talent)
+    -- 110% weapon damage as Physical, refreshes all judgements
+    [35395] = { name = "Crusader Strike", school = "physical", isPhysical = true, weaponDamagePercent = 1.10 },
 }
 
 -- Register Paladin spells with the main addon
 SpellTooltips.RegisterSpellData(PaladinSpells, "PALADIN")
-
--- Physical abilities are handled by the separate PhysicalTooltips addon

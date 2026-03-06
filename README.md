@@ -1,17 +1,16 @@
 # SpellTooltips
 
-A World of Warcraft addon for TBC Anniversary (Classic Era) that enhances **caster spell** tooltips with spell power calculations, showing actual damage values based on your current gear and talents.
-
-> **Note:** Physical ability tooltips (Warrior, Rogue, Hunter melee, Druid feral) are handled by the separate **PhysicalTooltips** addon.
+A World of Warcraft addon for TBC Anniversary (Classic Era) that enhances spell and ability tooltips with damage calculations, showing actual damage values based on your current gear, talents, and stats.
 
 ## Features
 
-- **Real-time damage calculation**: Updates tooltip damage values to reflect your current spell power
-- **Talent integration**: Automatically detects and applies talent bonuses (coefficient and multiplier)
+- **Real-time damage calculation**: Updates tooltip damage values based on Spell Power, Attack Power, or Ranged Attack Power
+- **Full class coverage**: Supports both caster spells (SP) and physical abilities (AP/RAP) for all classes
+- **Talent integration**: Automatically detects and applies talent bonuses (coefficient, multiplier, crit)
 - **Aura detection**: Tracks active damage-boosting buffs (Sanctity Aura, Ferocious Inspiration)
-- **Damage breakdown**: Shows base damage, spell power bonus, talent multipliers, and aura bonuses
-- **School-colored damage**: Damage values in tooltips are colored by spell school (fire, frost, arcane, etc.)
-- **Conditional talent notes**: Shows conditional bonuses like Molten Fury (+20% below 20% HP)
+- **Damage breakdown**: Shows base damage, stat bonuses, talent multipliers, and aura bonuses
+- **School-colored damage**: Damage values colored by school (fire, frost, physical, etc.)
+- **Special ability notes**: Shows requirements like "Behind target" or "Stealth required"
 
 ## Installation
 
@@ -22,8 +21,9 @@ A World of Warcraft addon for TBC Anniversary (Classic Era) that enhances **cast
 
 ## Usage
 
-Simply hover over any supported caster spell in your spellbook or action bar. The tooltip will display:
+Simply hover over any supported spell or ability in your spellbook or action bar. The tooltip will display calculated damage values.
 
+### Caster Spell Example (Mage)
 ```
 Frostbolt
 Rank 13
@@ -38,6 +38,29 @@ Bonus: +457 (91.4% SP)
 Talents: +11%
 ```
 
+### Physical Ability Example (Warrior)
+```
+Mortal Strike
+Rank 6
+
+A vicious strike that deals 856-912 damage and wounds the
+target, reducing the effectiveness of any healing by 50% for 10 sec.
+
+Damage: 856-912 (100% wpn + +210 flat)
+Crit: 1712-1824 (25.4% @ 2.00x)
+Talents: +15%
+```
+
+### Ranged Ability Example (Hunter)
+```
+Steady Shot
+
+A steady shot that causes 450-520 damage.
+
+Damage: 450-520 (100% wpn + 20% RAP + +150 flat)
+Crit: 900-1040 (28.2% @ 2.30x)
+```
+
 ### Slash Commands
 
 | Command | Description |
@@ -49,49 +72,88 @@ Talents: +11%
 | `/stt auras` | Show active damage-boosting auras |
 | `/stt seal` | Debug Seal of Righteousness calculation (Paladin) |
 
+**Tip:** Hold Shift while hovering to see the original unmodified tooltip.
+
 ## Supported Classes
 
-SpellTooltips supports **caster spells** for all classes with spell power scaling:
+### Caster Spells (Spell Power)
+- **Mage**: Fire, Frost, Arcane spells (~30 spells)
+- **Warlock**: Shadow/Fire damage, DoTs (~25 spells)
+- **Priest**: Shadow damage, Holy damage/healing (~35 spells)
+- **Druid**: Balance (Wrath, Starfire, Moonfire), Restoration healing (~20 spells)
+- **Shaman**: Elemental (Lightning, Shocks), Restoration healing (~30 spells)
+- **Paladin**: Holy damage/healing spells, Seals (~20 spells)
 
-- **Mage**: Fire, Frost, Arcane spells
-- **Paladin**: Holy damage/healing spells, Seal of Righteousness
-- **Warlock**: Shadow/Fire damage, DoTs
-- **Priest**: Shadow damage, Holy damage/healing
-- **Druid**: Balance (Wrath, Starfire, Moonfire), Restoration healing
-- **Shaman**: Elemental (Lightning, Shocks), Restoration healing
+### Physical Abilities (Attack Power)
+- **Warrior**: Mortal Strike, Bloodthirst, Heroic Strike, Whirlwind, etc. (~45 abilities)
+- **Rogue**: Sinister Strike, Backstab, Ambush, Mutilate, etc. (~35 abilities)
+- **Paladin**: Crusader Strike, Seal of Command (~5 abilities)
+- **Druid (Feral)**: Claw, Shred, Mangle, Maul, Swipe, etc. (~25 abilities)
+- **Shaman**: Stormstrike (~1 ability)
 
-Classes without spell power scaling spells (Warrior, Rogue, Hunter) have empty registrations - their physical abilities are handled by the PhysicalTooltips addon.
+### Ranged Abilities (Ranged Attack Power)
+- **Hunter**: Arcane Shot, Steady Shot, Aimed Shot, Multi-Shot, Serpent Sting, etc. (~50 abilities)
 
-## Spell Coefficients
+### Excluded Abilities
 
-All coefficients are datamined from Wowhead for TBC Classic accuracy.
+Some abilities are excluded due to dynamic resource scaling that changes frequently:
+- **Execute** (Warrior) - Damage scales with remaining rage
+- **Ferocious Bite** (Druid) - Converts remaining energy to damage
+- **Eviscerate, Rupture, Envenom** (Rogue) - Combo point scaling
+- **Rip** (Druid) - Combo point scaling
 
-### Example: Mage Fire Spells
+## Ability Data Format
 
-| Spell | Direct | DoT | Notes |
-|-------|--------|-----|-------|
-| Fireball | 100% | 0% | DoT does not scale |
-| Pyroblast | 115% | 5% | |
-| Fire Blast | 42.8% | - | Instant |
-| Scorch | 42.8% | - | 1.5s cast |
+### Caster Spells
+```lua
+[spellID] = {
+    name = "Spell Name",
+    coefficient = 0.857,      -- SP scaling
+    school = "fire",          -- Damage school
+    castTime = 2.5,           -- Cast time in seconds
+    isHealing = true,         -- Optional: healing spell
+    isDot = true,             -- Optional: DoT spell
+    ticks = 8,                -- Optional: number of DoT ticks
+}
+```
 
-See the full coefficient tables in the sections below for each class.
+### Physical Abilities
+```lua
+[spellID] = {
+    name = "Ability Name",
+    school = "physical",
+    isPhysical = true,
+    weaponDamagePercent = 1.0,   -- 100% weapon damage
+    apCoefficient = 0.45,        -- 45% of AP
+    flatDamage = 98,             -- Flat damage bonus
+    isNormalized = true,         -- Uses normalized weapon speed
+    isBleed = true,              -- Ignores armor
+    requiresBehind = true,       -- Must be behind target
+}
+```
+
+### Ranged Abilities
+```lua
+[spellID] = {
+    name = "Shot Name",
+    school = "physical",
+    isPhysical = true,
+    isRanged = true,             -- Uses RAP instead of AP
+    weaponDamagePercent = 1.0,   -- 100% weapon damage
+    rapCoefficient = 0.20,       -- 20% of RAP
+    flatDamage = 150,            -- Flat damage bonus
+}
+```
 
 ## Talent Support
 
 The addon automatically detects and applies talent bonuses:
 
-### Coefficient Modifiers
-Talents that increase spell power coefficient (e.g., Empowered Fireball +15% to Fireball coefficient)
-
-### Damage Multipliers
-Talents that increase all damage for a school (e.g., Fire Power +10% fire damage)
-
-### Crit Chance Bonuses
-Talents that increase critical strike chance (shown in tooltip breakdown)
-
-### Crit Damage Multipliers
-Talents that increase critical strike damage (e.g., Ice Shards +100% frost crit damage)
+- **Coefficient Modifiers**: Talents that increase spell power coefficient (e.g., Empowered Fireball)
+- **Damage Multipliers**: Talents that increase all damage for a school (e.g., Fire Power)
+- **Physical Multipliers**: Talents that increase physical damage (e.g., Two-Handed Weapon Specialization)
+- **Crit Chance Bonuses**: Talents that increase critical strike chance
+- **Crit Damage Multipliers**: Talents that increase critical strike damage (e.g., Ice Shards)
 
 ## Aura Support
 
@@ -102,30 +164,28 @@ The addon detects active party/raid buffs that affect damage calculations:
 | Sanctity Aura | Paladin | +10% | Holy damage spells |
 | Ferocious Inspiration | Hunter (BM) | +3% | All damage |
 
-Aura bonuses are shown in the tooltip breakdown as "Auras: +X%".
-
 ## File Structure
 
 ```
 SpellTooltips/
 ├── SpellTooltips.toc    # Addon manifest
-├── Core.lua             # Main tooltip logic (caster spells only)
+├── Core.lua             # Main tooltip logic (SP + AP/RAP)
 ├── Utils.lua            # Helper functions
 ├── SpellData.lua        # Spell lookup functions
 ├── TalentData.lua       # Talent definitions and caching
-├── AuraData.lua         # Aura/buff detection for damage multipliers
+├── AuraData.lua         # Aura/buff detection
 ├── Tags.lua             # Spell classification tags
 ├── SpellTests.lua       # Testing framework
 ├── Classes/
 │   ├── Mage.lua         # Mage spell coefficients
-│   ├── Paladin.lua      # Paladin Holy spells + Seals
 │   ├── Warlock.lua      # Warlock spell coefficients
 │   ├── Priest.lua       # Priest spell coefficients
-│   ├── Druid.lua        # Druid Balance/Resto spells
-│   ├── Shaman.lua       # Shaman Elemental/Resto spells
-│   ├── Rogue.lua        # Empty (physical in PhysicalTooltips)
-│   ├── Warrior.lua      # Empty (physical in PhysicalTooltips)
-│   └── Hunter.lua       # Empty (uses RAP, not spell power)
+│   ├── Druid.lua        # Druid spells + feral abilities
+│   ├── Shaman.lua       # Shaman spells + Stormstrike
+│   ├── Paladin.lua      # Paladin spells + physical
+│   ├── Warrior.lua      # Warrior physical abilities
+│   ├── Rogue.lua        # Rogue physical abilities
+│   └── Hunter.lua       # Hunter RAP abilities
 └── README.md
 ```
 
@@ -142,53 +202,61 @@ SpellTooltips/
 
 ### Wrong damage values
 - The addon uses Wowhead datamined coefficients for TBC
-- Spells with coefficient 0.0 (no spell power scaling) are skipped
+- Abilities with no scaling (coefficient 0.0) are skipped
+- Hold Shift to see original tooltip and compare
 
 ## Version History
 
-### 3.0.1 (Current)
+### 4.1.0 (Current)
+- **Fix**: Corrected weapon damage calculations - abilities now properly use base vs total weapon damage
+  - Seal of Command, Seal of Righteousness: Use base weapon damage (without AP)
+  - Steady Shot: Uses base ranged damage + separate RAP scaling (no double-counting)
+  - Standard physical abilities (Mortal Strike, etc.): Use total weapon damage (correct)
+- **Fix**: Corrected crit damage multiplier formula for all classes
+  - Talents now properly increase the crit BONUS, not the total
+  - Example: Ice Shards 5/5 = 2.0x crit (was incorrectly showing 2.5x)
+  - Spell Power + Ice Shards = 2.25x crit (correct stacking)
+- **Fix**: Fixed Seal of Command stunned damage to properly double base damage
+- **Fix**: Judgement of Righteousness coefficient corrected to 71.4% (was 73%)
+- **Added**: Crit damage display for Judgement sections in seal tooltips
+- **Added**: Crit damage display for multi-part spells
+- **Added**: Proper categorization of crit damage talents (physical/school/spell-specific)
+- **Added**: DAMAGE_FORMULAS.md - comprehensive damage calculation reference
+
+### 4.0.0
+- **Major feature**: Added Attack Power (AP) and Ranged Attack Power (RAP) support
+- All melee and ranged physical abilities now supported
+- Added Warrior abilities: Mortal Strike, Bloodthirst, Heroic Strike, Whirlwind, etc.
+- Added Rogue abilities: Sinister Strike, Backstab, Ambush, Mutilate, etc.
+- Added Hunter abilities: Arcane Shot, Steady Shot, Aimed Shot, Multi-Shot, etc.
+- Updated Druid feral abilities: Claw, Shred, Mangle, Maul, Swipe, etc.
+- Added Shaman Stormstrike
+- Added normalized weapon speed support (1.7/2.4/3.3/2.8/1.0)
+- Added special ability notes (Behind target, Stealth required, Bleed)
+- Unified SP and AP/RAP into single addon
+
+### 3.0.1
 - Fixed One-Handed Weapon Specialization to only apply with 1H weapons equipped
 - Fixed Seal of Righteousness damage formula
 - Added weapon caching system (refreshes on equipment change)
 - Added `/stt seal` debug command for Paladin seal calculations
-- Fixed aura multipliers to be multiplicative (Sanctity × Ferocious Inspiration)
+- Fixed aura multipliers to be multiplicative
 
 ### 3.0.0
-- **Major refactor**: Separated caster spells from physical abilities
-- Physical ability support moved to separate **PhysicalTooltips** addon
-- SpellTooltips now only handles caster spells with spell power scaling
-- Significantly simplified codebase and reduced performance overhead
-- Removed all physical ability processing code
-
-### 2.4.0
+- Major refactor of caster spell handling
+- Improved talent detection system
 - Added aura/buff detection for damage multipliers
-- Major performance optimization: talent bonuses pre-computed on login
-
-### 2.3.0
-- Added Hunter class support
-
-### 2.2.0
-- Added Warrior class support
-
-### 2.1.0
-- Added weapon type detection for normalized damage
 
 ### 2.0.0
-- Added physical damage ability support (Rogue, etc.)
-
-### 1.5.0
-- Added Shaman spell support - All caster classes now supported!
+- Initial caster spell support for all classes
 
 ### 1.0.0
 - Initial release with Mage spell support
 
-## Related Addons
-
-- **PhysicalTooltips**: Companion addon for physical ability tooltips (Warrior, Rogue, Hunter, Druid feral)
-
 ## Credits
 
 - Spell coefficients sourced from [Wowhead TBC Classic](https://www.wowhead.com/tbc/)
+- AP/RAP formulas from Elitist Jerks TBC archives
 - Built for TBC Anniversary (Interface 20504)
 
 ## License

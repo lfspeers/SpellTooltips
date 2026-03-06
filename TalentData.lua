@@ -228,6 +228,17 @@ SpellTooltips.TalentInfo = {
         class = "MAGE",
     },
 
+    -- Shatter: +17% crit vs frozen targets per rank
+    SHATTER = {
+        tab = 3, index = 11, maxRanks = 3,
+        perRank = 0.17,
+        school = "frost",
+        type = "conditional",
+        condition = "vs frozen targets",
+        name = "Shatter",
+        class = "MAGE",
+    },
+
     -- ===================
     -- CRIT DAMAGE TALENTS
     -- ===================
@@ -343,16 +354,8 @@ SpellTooltips.TalentInfo = {
     -- ===================
 
     -- Vengeance: +1% damage per rank after crit, stacks 3x (5 ranks = 15% at 3 stacks) (Retribution tree)
-    VENGEANCE = {
-        tab = 3, index = 2, maxRanks = 5,
-        perRank = 0.01, -- per rank per stack
-        maxStacks = 3,
-        school = "holy",
-        type = "conditional",
-        condition = "after critical strike (stacks 3x)",
-        name = "Vengeance",
-        class = "PALADIN",
-    },
+    -- Note: Vengeance is tracked in AuraData.lua as a buff since it must be active to apply
+    -- The talent ranks are checked there to calculate the bonus dynamically
 
     -- Crusade: +3% damage vs Humanoids, Demons, Undead, Elementals (Retribution tree)
     CRUSADE = {
@@ -376,6 +379,7 @@ SpellTooltips.TalentInfo = {
     },
 
     -- Two-Handed Weapon Specialization: +2% damage with 2H weapons per rank (Retribution tree)
+    -- Note: This bonus is already reflected in the game's weapon damage tooltip/API values
     TWO_HANDED_WEAPON_SPEC = {
         tab = 3, index = 7, maxRanks = 3,
         perRank = 0.02,
@@ -384,6 +388,7 @@ SpellTooltips.TalentInfo = {
         class = "PALADIN",
         isPhysical = true,
         requires2H = true,
+        isIncludedInWeaponDamage = true,  -- Already applied by game to weapon damage
     },
 
     -- =====================
@@ -439,6 +444,16 @@ SpellTooltips.TalentInfo = {
         class = "WARLOCK",
     },
 
+    -- Improved Curse of Agony: +5% Curse of Agony damage per rank
+    IMPROVED_CURSE_OF_AGONY = {
+        tab = 1, index = 7, maxRanks = 2,
+        perRank = 0.05,
+        affects = { "Curse of Agony" },
+        type = "multiplier",
+        name = "Improved Curse of Agony",
+        class = "WARLOCK",
+    },
+
     -- Emberstorm: +2% fire damage per rank
     EMBERSTORM = {
         tab = 3, index = 9, maxRanks = 5,
@@ -446,6 +461,16 @@ SpellTooltips.TalentInfo = {
         school = "fire",
         type = "multiplier",
         name = "Emberstorm",
+        class = "WARLOCK",
+    },
+
+    -- Improved Immolate: +5% Immolate damage per rank
+    IMPROVED_IMMOLATE = {
+        tab = 3, index = 3, maxRanks = 5,
+        perRank = 0.05,
+        affects = { "Immolate" },
+        type = "multiplier",
+        name = "Improved Immolate",
         class = "WARLOCK",
     },
 
@@ -470,6 +495,16 @@ SpellTooltips.TalentInfo = {
         perRank = 0.01,
         type = "crit",
         name = "Backlash",
+        class = "WARLOCK",
+    },
+
+    -- Improved Searing Pain: +crit to Searing Pain (4%/7%/10% - averaged to 3.33% per rank)
+    IMPROVED_SEARING_PAIN = {
+        tab = 3, index = 5, maxRanks = 3,
+        perRank = 0.0333,
+        affects = { "Searing Pain" },
+        type = "crit",
+        name = "Improved Searing Pain",
         class = "WARLOCK",
     },
 
@@ -589,15 +624,8 @@ SpellTooltips.TalentInfo = {
         class = "PRIEST",
     },
 
-    -- Shadowform: +15% shadow damage (1 rank talent)
-    SHADOWFORM = {
-        tab = 3, index = 21, maxRanks = 1,
-        perRank = 0.15,
-        school = "shadow",
-        type = "multiplier",
-        name = "Shadowform",
-        class = "PRIEST",
-    },
+    -- Note: Shadowform is tracked in AuraData.lua as an aura buff, not as a talent
+    -- This prevents double-counting when the buff is active
 
     -- Searing Light: +5% damage to Smite, Holy Fire
     SEARING_LIGHT = {
@@ -616,6 +644,16 @@ SpellTooltips.TalentInfo = {
         affects = { "Smite", "Mind Blast" },
         type = "multiplier",
         name = "Focused Power",
+        class = "PRIEST",
+    },
+
+    -- Spiritual Healing: +2% healing to ALL healing spells per rank
+    SPIRITUAL_HEALING = {
+        tab = 2, index = 16, maxRanks = 5,
+        perRank = 0.02,
+        type = "multiplier",
+        isHealing = true,
+        name = "Spiritual Healing",
         class = "PRIEST",
     },
 
@@ -981,6 +1019,16 @@ SpellTooltips.TalentInfo = {
         class = "SHAMAN",
     },
 
+    -- Call of Flame: +5% Fire Totem damage per rank
+    CALL_OF_FLAME = {
+        tab = 1, index = 5, maxRanks = 3,
+        perRank = 0.05,
+        affects = { "Searing Totem", "Magma Totem", "Fire Nova Totem" },
+        type = "multiplier",
+        name = "Call of Flame",
+        class = "SHAMAN",
+    },
+
     -- Purification: +2% healing to all healing spells per rank
     PURIFICATION = {
         tab = 3, index = 14, maxRanks = 5,
@@ -1142,6 +1190,7 @@ SpellTooltips.TalentInfo = {
     -- ===================
 
     -- Two-Handed Weapon Specialization (Arms): +2% damage with 2H per rank
+    -- Note: This bonus is already reflected in the game's weapon damage tooltip/API values
     TWO_HANDED_WEAPON_SPEC_WARRIOR = {
         tab = 1, index = 19, maxRanks = 5,
         perRank = 0.02,
@@ -1150,9 +1199,11 @@ SpellTooltips.TalentInfo = {
         class = "WARRIOR",
         isPhysical = true,
         requires2H = true,
+        isIncludedInWeaponDamage = true,  -- Already applied by game to weapon damage
     },
 
     -- One-Handed Weapon Specialization (Arms): +2% damage with 1H per rank
+    -- Note: This bonus is already reflected in the game's weapon damage tooltip/API values
     ONE_HANDED_WEAPON_SPEC = {
         tab = 1, index = 23, maxRanks = 5,
         perRank = 0.02,
@@ -1161,6 +1212,7 @@ SpellTooltips.TalentInfo = {
         class = "WARRIOR",
         isPhysical = true,
         requires1H = true,
+        isIncludedInWeaponDamage = true,  -- Already applied by game to weapon damage
     },
 
     -- Dual Wield Specialization (Fury): +5% off-hand damage per rank
@@ -1507,7 +1559,9 @@ BuildComputedCache = function()
     computedCache.critBonusBySpell = {}
     computedCache.critBonusGlobal = 0
     computedCache.critDamageBySchool = {}
+    computedCache.critDamageBySpell = {}
     computedCache.critDamageGlobal = 0
+    computedCache.critDamagePhysical = 0
     computedCache.physicalMultiplierGlobal = 0
     computedCache.physicalMultiplierBySpell = {}
     computedCache.physicalMultiplierBySchool = {}
@@ -1564,7 +1618,10 @@ BuildComputedCache = function()
 
                     -- Physical damage multipliers
                     elseif talentInfo.isPhysical then
-                        if talentInfo.requires2H then
+                        -- Skip talents that are already included in weapon damage by the game
+                        if talentInfo.isIncludedInWeaponDamage then
+                            -- Don't add to multiplier - game already applies this to weapon damage
+                        elseif talentInfo.requires2H then
                             computedCache.physicalMultiplier2H = computedCache.physicalMultiplier2H + bonus
                         elseif talentInfo.requires1H then
                             computedCache.physicalMultiplier1H = computedCache.physicalMultiplier1H + bonus
@@ -1601,10 +1658,21 @@ BuildComputedCache = function()
 
                 -- Crit damage bonuses
                 elseif talentInfo.type == "critdamage" then
-                    if talentInfo.school then
+                    if talentInfo.isPhysical then
+                        -- Physical crit damage (Impale, Lethality, Mortal Shots)
+                        computedCache.critDamagePhysical = computedCache.critDamagePhysical + bonus
+                    elseif talentInfo.affects then
+                        -- Spell-specific crit damage (Ruin, Vengeance, Elemental Fury)
+                        for _, spellName in ipairs(talentInfo.affects) do
+                            computedCache.critDamageBySpell[spellName] =
+                                (computedCache.critDamageBySpell[spellName] or 0) + bonus
+                        end
+                    elseif talentInfo.school then
+                        -- School-based crit damage (Ice Shards)
                         computedCache.critDamageBySchool[talentInfo.school] =
                             (computedCache.critDamageBySchool[talentInfo.school] or 0) + bonus
                     else
+                        -- Global spell crit damage (Spell Power)
                         computedCache.critDamageGlobal = computedCache.critDamageGlobal + bonus
                     end
                 end
@@ -1782,19 +1850,39 @@ function SpellTooltips.Talents.GetPhysicalMultiplier(spellName, is2HWeapon, dama
     return 1 + totalBonus, {}
 end
 
--- Get crit damage multiplier for a school
--- Base crit damage in TBC is 150% (1.5x multiplier)
--- Returns total multiplier (e.g., 2.5 for 250% crit damage with Ice Shards)
-function SpellTooltips.Talents.GetCritDamageMultiplier(school)
+-- Get crit damage multiplier for a school/spell
+-- Base crit damage in TBC: Spells = 150% (1.5x), Physical = 200% (2.0x)
+-- Talents increase the BONUS portion, not the total
+-- E.g., Ice Shards 5/5 (+100% crit bonus): 50% bonus * 2 = 100% bonus = 2.0x total
+function SpellTooltips.Talents.GetCritDamageMultiplier(school, isPhysical, spellName)
     EnsureComputedCache()
 
-    local baseCritMultiplier = 1.5  -- 150% base crit damage in TBC
-    local bonusMultiplier = computedCache.critDamageGlobal
+    -- Base crit BONUS (not multiplier): spells = 50%, physical = 100%
+    local baseCritBonus = isPhysical and 1.0 or 0.5
 
-    if school then
-        local schoolLower = string.lower(school)
-        bonusMultiplier = bonusMultiplier + (computedCache.critDamageBySchool[schoolLower] or 0)
+    -- Talent bonus increases the crit bonus multiplicatively
+    local talentBonus = 0
+
+    if isPhysical then
+        -- Physical abilities use physical crit damage bonus
+        talentBonus = computedCache.critDamagePhysical
+    else
+        -- Spell crit damage: global + school-specific + spell-specific
+        talentBonus = computedCache.critDamageGlobal
+
+        if school then
+            local schoolLower = string.lower(school)
+            talentBonus = talentBonus + (computedCache.critDamageBySchool[schoolLower] or 0)
+        end
+
+        if spellName then
+            talentBonus = talentBonus + (computedCache.critDamageBySpell[spellName] or 0)
+        end
     end
 
-    return baseCritMultiplier + bonusMultiplier
+    -- Final crit bonus = base bonus * (1 + talent bonus)
+    -- E.g., 50% * (1 + 1.0) = 100% bonus = 2.0x multiplier
+    local finalCritBonus = baseCritBonus * (1 + talentBonus)
+
+    return 1.0 + finalCritBonus
 end

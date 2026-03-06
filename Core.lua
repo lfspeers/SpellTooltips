@@ -17,18 +17,27 @@ frame:RegisterEvent("PLAYER_TALENT_UPDATE")
 frame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
 frame:RegisterEvent("UNIT_AURA")
 frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
+frame:RegisterEvent("UNIT_ATTACK_POWER")
 
 -- Track if we've already processed this tooltip
 local tooltipProcessed = false
 local lastProcessedSpellID = nil
 
--- Weapon data cache (refreshed on equipment change)
-local weaponCache = {
-    valid = false,
-    speed = 2.0,
+-- Combat stats cache (refreshed on specific events)
+local combatCache = {
+    -- Weapon stats (invalidated by PLAYER_EQUIPMENT_CHANGED)
+    weaponValid = false,
+    weaponSpeed = 2.0,
     is2H = false,
-    minDmg = 0,
-    maxDmg = 0,
+    -- Attack power (invalidated by UNIT_ATTACK_POWER, UNIT_AURA)
+    apValid = false,
+    attackPower = 0,
+    -- Computed values (use UnitDamage which includes AP)
+    totalMinDmg = 0,
+    totalMaxDmg = 0,
+    -- Base weapon damage (computed: totalDmg - AP contribution)
+    baseWeaponMin = 0,
+    baseWeaponMax = 0,
 }
 
 -- Debug mode flag (off by default)
@@ -60,6 +69,7 @@ local C = {
 
 -- School colors (matching WoW's damage school colors)
 local SCHOOL_COLORS = {
+    physical = "|cFFC79C6E",  -- Warrior brown/tan
     holy = "|cFFFFB3E6",
     fire = "|cFFFF8000",
     nature = "|cFF4DFF4D",
@@ -80,58 +90,346 @@ local function GetSchoolColor(school, isHealing)
     return SCHOOL_COLORS[string.lower(school)] or C.WHITE
 end
 
--- Refresh weapon cache (called on equipment change)
-local function RefreshWeaponCache()
+-- Refresh weapon stats (called on equipment change)
+local function RefreshWeaponStats()
     -- Get weapon speed
     local speed, _ = UnitAttackSpeed("player")
-    weaponCache.speed = speed or 2.0
+    combatCache.weaponSpeed = speed or 2.0
 
     -- Check if 2H weapon
     local itemID = GetInventoryItemID("player", 16)
     if itemID then
         local _, _, _, _, _, _, _, _, itemEquipLoc = GetItemInfo(itemID)
-        weaponCache.is2H = (itemEquipLoc == "INVTYPE_2HWEAPON")
+        combatCache.is2H = (itemEquipLoc == "INVTYPE_2HWEAPON")
     else
-        weaponCache.is2H = false
+        combatCache.is2H = false
     end
 
-    -- Get weapon damage (includes AP, used as approximation)
+    -- Get total weapon damage (includes AP contribution)
     local minDmg, maxDmg, _, _, _, _ = UnitDamage("player")
-    weaponCache.minDmg = minDmg or 0
-    weaponCache.maxDmg = maxDmg or 0
+    combatCache.totalMinDmg = minDmg or 0
+    combatCache.totalMaxDmg = maxDmg or 0
 
-    weaponCache.valid = true
-    DebugPrint("Weapon cache refreshed - Speed:", weaponCache.speed, "2H:", weaponCache.is2H, "Dmg:", weaponCache.minDmg, "-", weaponCache.maxDmg)
+    combatCache.weaponValid = true
+    DebugPrint("Weapon stats refreshed - Speed:", combatCache.weaponSpeed, "2H:", combatCache.is2H)
 end
 
--- Ensure weapon cache is valid
-local function EnsureWeaponCache()
-    if not weaponCache.valid then
-        RefreshWeaponCache()
-    end
+-- Refresh attack power (called on AP change or aura change)
+local function RefreshAttackPower()
+    local base, pos, neg = UnitAttackPower("player")
+    combatCache.attackPower = (base or 0) + (pos or 0) + (neg or 0)
+    combatCache.apValid = true
+    DebugPrint("Attack power refreshed:", combatCache.attackPower)
+end
+
+-- Compute base weapon damage (without AP contribution)
+local function ComputeBaseWeaponDamage()
+    if not combatCache.weaponValid then RefreshWeaponStats() end
+    if not combatCache.apValid then RefreshAttackPower() end
+
+    -- Refresh total damage (may have changed with AP)
+    local minDmg, maxDmg, _, _, _, _ = UnitDamage("player")
+    combatCache.totalMinDmg = minDmg or 0
+    combatCache.totalMaxDmg = maxDmg or 0
+
+    -- AP contribution to weapon damage: (AP / 14) * weaponSpeed
+    local apContribution = (combatCache.attackPower / 14) * combatCache.weaponSpeed
+
+    -- Base weapon damage = total - AP contribution
+    combatCache.baseWeaponMin = math.max(0, combatCache.totalMinDmg - apContribution)
+    combatCache.baseWeaponMax = math.max(0, combatCache.totalMaxDmg - apContribution)
+
+    DebugPrint("Base weapon damage:", Round(combatCache.baseWeaponMin), "-", Round(combatCache.baseWeaponMax),
+               "(AP contrib:", Round(apContribution), ")")
 end
 
 -- Invalidate weapon cache (called on equipment change)
 local function InvalidateWeaponCache()
-    weaponCache.valid = false
+    combatCache.weaponValid = false
+end
+
+-- Invalidate AP cache (called on AP/aura change)
+local function InvalidateAPCache()
+    combatCache.apValid = false
 end
 
 -- Get main hand weapon speed (for seal calculations)
 local function GetMainHandSpeed()
-    EnsureWeaponCache()
-    return weaponCache.speed
+    if not combatCache.weaponValid then RefreshWeaponStats() end
+    return combatCache.weaponSpeed
 end
 
 -- Check if using two-handed weapon (for Seal of Righteousness)
 local function IsTwoHandedWeapon()
-    EnsureWeaponCache()
-    return weaponCache.is2H
+    if not combatCache.weaponValid then RefreshWeaponStats() end
+    return combatCache.is2H
 end
 
--- Get main hand weapon damage (min, max)
+-- Get main hand weapon damage (total, includes AP - for seals that use modified damage)
 local function GetMainHandWeaponDamage()
-    EnsureWeaponCache()
-    return weaponCache.minDmg, weaponCache.maxDmg
+    if not combatCache.weaponValid then RefreshWeaponStats() end
+    return combatCache.totalMinDmg, combatCache.totalMaxDmg
+end
+
+-- Get base weapon damage (without AP - for physical abilities)
+local function GetBaseWeaponDamage()
+    ComputeBaseWeaponDamage()
+    return combatCache.baseWeaponMin, combatCache.baseWeaponMax
+end
+
+-- Get attack power
+local function GetAttackPower()
+    if not combatCache.apValid then RefreshAttackPower() end
+    return combatCache.attackPower
+end
+
+-- Get ranged attack power
+local function GetRangedAttackPower()
+    return Utils.GetPlayerRangedAttackPower()
+end
+
+-- Get base ranged weapon damage (without RAP contribution)
+local function GetBaseRangedWeaponDamage()
+    local speed, minDmg, maxDmg = UnitRangedDamage("player")
+    if not speed or speed == 0 then
+        return 0, 0, 0
+    end
+
+    -- RAP contribution to ranged damage: (RAP / 14) * rangedSpeed
+    local rap = GetRangedAttackPower()
+    local rapContribution = (rap / 14) * speed
+
+    -- Base ranged damage = total - RAP contribution
+    local baseMin = math.max(0, (minDmg or 0) - rapContribution)
+    local baseMax = math.max(0, (maxDmg or 0) - rapContribution)
+
+    return baseMin, baseMax, speed
+end
+
+-- Normalized weapon speeds for AP calculation
+local NORMALIZED_SPEEDS = {
+    ["DAGGER"] = 1.7,
+    ["ONE_HAND"] = 2.4,
+    ["TWO_HAND"] = 3.3,
+    ["RANGED"] = 2.8,
+    ["FERAL"] = 1.0,  -- Feral forms use 1.0 normalized speed
+}
+
+-- Get normalized weapon speed for an ability
+local function GetNormalizedSpeed(spellData)
+    if spellData.normalizedSpeed then
+        return spellData.normalizedSpeed
+    end
+
+    -- Default normalization based on weapon type
+    if spellData.isRanged then
+        return NORMALIZED_SPEEDS.RANGED
+    end
+
+    -- Check equipped weapon type
+    if IsTwoHandedWeapon() then
+        return NORMALIZED_SPEEDS.TWO_HAND
+    end
+
+    -- Check for dagger (1H with faster normalization)
+    local itemID = GetInventoryItemID("player", 16)
+    if itemID then
+        local _, _, _, _, _, _, itemSubType = GetItemInfo(itemID)
+        if itemSubType == "Daggers" then
+            return NORMALIZED_SPEEDS.DAGGER
+        end
+    end
+
+    return NORMALIZED_SPEEDS.ONE_HAND
+end
+
+-- Calculate AP bonus damage for a physical ability
+-- Formula: (AP / 14) * normalizedSpeed (if normalized) or weaponSpeed (if not)
+local function CalculateAPBonus(ap, spellData)
+    if not spellData or not ap or ap == 0 then return 0 end
+
+    local speed
+    if spellData.isNormalized then
+        speed = GetNormalizedSpeed(spellData)
+    else
+        speed = GetMainHandSpeed()
+    end
+
+    return (ap / 14) * speed
+end
+
+-- Calculate full physical ability damage
+-- Returns: minDmg, maxDmg, apBonus, weaponDmgPortion
+local function CalculatePhysicalDamage(spellData)
+    if not spellData then return 0, 0, 0, 0 end
+
+    local weaponMin, weaponMax
+    local ap
+
+    -- Check if ability has both weapon% AND separate AP scaling
+    -- If so, use BASE weapon damage to avoid double-counting AP
+    local weaponPercent = spellData.weaponDamagePercent or 0
+    local apCoeff = spellData.apCoefficient or spellData.rapCoefficient or 0
+    local hasBothScalings = weaponPercent > 0 and apCoeff > 0
+
+    if spellData.isRanged then
+        ap = GetRangedAttackPower()
+        if hasBothScalings then
+            -- Use base ranged damage (e.g., Steady Shot: base weapon + RAP*0.20)
+            weaponMin, weaponMax = GetBaseRangedWeaponDamage()
+        else
+            -- Use total ranged damage (e.g., Aimed Shot: 100% ranged damage)
+            local speed, minDmg, maxDmg = UnitRangedDamage("player")
+            weaponMin = minDmg or 0
+            weaponMax = maxDmg or 0
+        end
+    else
+        ap = GetAttackPower()
+        if hasBothScalings then
+            -- Use base melee damage (avoids double-counting AP)
+            weaponMin, weaponMax = GetBaseWeaponDamage()
+        else
+            -- Use total melee damage (e.g., Mortal Strike: 100% weapon damage)
+            weaponMin, weaponMax = GetMainHandWeaponDamage()
+        end
+    end
+
+    -- Calculate weapon damage portion
+    local weaponDmgMin = weaponMin * weaponPercent
+    local weaponDmgMax = weaponMax * weaponPercent
+
+    -- Calculate flat AP coefficient bonus (separate from weapon damage)
+    local apBonus = ap * apCoeff
+
+    -- Add flat damage bonus
+    local flatDmg = spellData.flatDamage or 0
+
+    -- Total damage
+    local totalMin = weaponDmgMin + apBonus + flatDmg
+    local totalMax = weaponDmgMax + apBonus + flatDmg
+
+    return totalMin, totalMax, apBonus, (weaponDmgMin + weaponDmgMax) / 2
+end
+
+-- Build tooltip for physical abilities (AP/RAP scaling)
+local function BuildPhysicalTooltip(tooltip, spellData, spellID)
+    local schoolColor = GetSchoolColor(spellData.school, false)
+
+    -- Calculate damage
+    local dmgMin, dmgMax, apBonus, weaponPortion = CalculatePhysicalDamage(spellData)
+
+    -- Get multipliers
+    local is2H = IsTwoHandedWeapon()
+    local physicalMultiplier = Talents.GetPhysicalMultiplier(spellData.name, is2H, spellData.school)
+    local auraMultiplier = 1.0
+    if SpellTooltips.Auras then
+        auraMultiplier = SpellTooltips.Auras.GetSchoolMultiplier(spellData.school)
+    end
+    local totalMultiplier = physicalMultiplier * auraMultiplier
+
+    -- Apply multipliers
+    dmgMin = Round(dmgMin * totalMultiplier)
+    dmgMax = Round(dmgMax * totalMultiplier)
+
+    -- Update tooltip text with calculated damage
+    for i = 1, tooltip:NumLines() do
+        local textLeft = _G[tooltip:GetName() .. "TextLeft" .. i]
+        if textLeft then
+            local text = textLeft:GetText()
+            if text and text:len() > 10 then
+                local newText = text
+                -- Replace "X% weapon damage" pattern
+                newText = newText:gsub("(%d+)%%%s*weapon%s+damage", function(pct)
+                    return schoolColor .. dmgMin .. "-" .. dmgMax .. C.RESET .. " damage"
+                end)
+                -- Replace "X% of weapon damage" pattern
+                newText = newText:gsub("(%d+)%%%s+of%s+weapon%s+damage", function(pct)
+                    return schoolColor .. dmgMin .. "-" .. dmgMax .. C.RESET .. " damage"
+                end)
+                -- Replace "weapon damage plus X" pattern
+                newText = newText:gsub("weapon%s+damage%s+plus%s+(%d+)", function(bonus)
+                    local bonusNum = tonumber(bonus) or 0
+                    local newMin = dmgMin + Round(bonusNum * totalMultiplier)
+                    local newMax = dmgMax + Round(bonusNum * totalMultiplier)
+                    return schoolColor .. newMin .. "-" .. newMax .. C.RESET .. " damage"
+                end)
+                -- Replace "an additional X damage" pattern (flat bonus)
+                newText = newText:gsub("(additional%s+)(%d+)(%s+damage)", function(pre, dmg, post)
+                    local baseDmg = tonumber(dmg) or 0
+                    local newDmg = Round(baseDmg * totalMultiplier)
+                    return pre .. schoolColor .. newDmg .. C.RESET .. post
+                end)
+                if newText ~= text then
+                    textLeft:SetText(newText)
+                end
+            end
+        end
+    end
+
+    -- Add breakdown section
+    tooltip:AddLine(" ")
+
+    -- Damage line
+    local weaponPercent = (spellData.weaponDamagePercent or 0) * 100
+    local apCoeff = (spellData.apCoefficient or spellData.rapCoefficient or 0) * 100
+    local apLabel = spellData.isRanged and "RAP" or "AP"
+
+    if weaponPercent > 0 and apCoeff > 0 then
+        tooltip:AddLine(string.format("Damage: %s%d-%d%s (%.0f%% wpn + %.0f%% %s)",
+            schoolColor, dmgMin, dmgMax, C.RESET, weaponPercent, apCoeff, apLabel), 1, 1, 1)
+    elseif weaponPercent > 0 then
+        tooltip:AddLine(string.format("Damage: %s%d-%d%s (%.0f%% weapon)",
+            schoolColor, dmgMin, dmgMax, C.RESET, weaponPercent), 1, 1, 1)
+    elseif apCoeff > 0 then
+        tooltip:AddLine(string.format("Damage: %s%d-%d%s (%.0f%% %s)",
+            schoolColor, dmgMin, dmgMax, C.RESET, apCoeff, apLabel), 1, 1, 1)
+    end
+
+    -- Flat damage bonus
+    if spellData.flatDamage and spellData.flatDamage > 0 then
+        local flatBonus = Round(spellData.flatDamage * totalMultiplier)
+        tooltip:AddLine(string.format("%sFlat bonus: %s+%d",
+            C.WHITE, schoolColor, flatBonus), 1, 1, 1)
+    end
+
+    -- Talent/aura modifiers (before crit, matching spell format)
+    if physicalMultiplier > 1 then
+        local bonusPercent = math.floor((physicalMultiplier - 1) * 100 + 0.5)
+        tooltip:AddLine(string.format("%sTalents: %s+%d%%", C.WHITE, C.GRAY, bonusPercent), 1, 1, 1)
+    end
+    if auraMultiplier > 1 then
+        local bonusPercent = math.floor((auraMultiplier - 1) * 100 + 0.5)
+        tooltip:AddLine(string.format("%sAuras: %s+%d%%", C.WHITE, C.GRAY, bonusPercent), 1, 1, 1)
+    end
+
+    -- Crit info (after talents/auras, matching spell format)
+    local baseCritChance
+    if spellData.isRanged then
+        baseCritChance = Utils.GetPlayerRangedCritChance()
+    else
+        baseCritChance = Utils.GetPlayerMeleeCritChance()
+    end
+    local critBonus = Talents.GetCritChanceBonus(spellData.name, spellData.school)
+    local totalCritChance = baseCritChance + critBonus
+    local critMultiplier = Talents.GetCritDamageMultiplier(spellData.school, true, spellData.name)
+    local critMin = Round(dmgMin * critMultiplier)
+    local critMax = Round(dmgMax * critMultiplier)
+    tooltip:AddLine(string.format("Crit: %s%d-%d%s (%.1f%% @ %.1fx)",
+        C.CRIT, critMin, critMax, C.RESET, totalCritChance, critMultiplier), 1, 1, 1)
+
+    -- Special notes
+    if spellData.requiresBehind then
+        tooltip:AddLine(C.YELLOW .. "Requires: Behind target" .. C.RESET, 1, 1, 1)
+    end
+    if spellData.requiresStealth then
+        tooltip:AddLine(C.YELLOW .. "Requires: Stealth" .. C.RESET, 1, 1, 1)
+    end
+    if spellData.isBleed then
+        tooltip:AddLine(C.YELLOW .. "Bleed: Ignores armor" .. C.RESET, 1, 1, 1)
+    end
+
+    tooltip:Show()
+    return true
 end
 
 -- Patterns for parsing tooltip
@@ -300,6 +598,10 @@ local function FormatDamageBreakdown(data, spellData, spellPower)
         baseStr = string.format("%d-%d", data.damageMin, data.damageMax)
     end
 
+    -- Calculate final damage for crit display
+    local newMin = Round(data.damageMin * multiplier + bonusDamage)
+    local newMax = Round(data.damageMax * multiplier + bonusDamage)
+
     table.insert(lines, string.format("%sBase: %s%s", C.WHITE, C.GRAY, baseStr))
     table.insert(lines, string.format("%sBonus: %s+%d (%s %s)", C.WHITE, C.GRAY, bonusDamage, coeffStr, powerLabel))
 
@@ -318,12 +620,13 @@ local function FormatDamageBreakdown(data, spellData, spellPower)
         local baseCritChance = Utils.GetPlayerSpellCritChance(spellData.school)
         local critBonus = Talents.GetCritChanceBonus(spellData.name, spellData.school)
         local totalCritChance = baseCritChance + critBonus
-        local critMultiplier = Talents.GetCritDamageMultiplier(spellData.school)
+        local critMult = Talents.GetCritDamageMultiplier(spellData.school, false, spellData.name)
 
         if totalCritChance > 0 then
-            local critDmgBonus = (critMultiplier - 1) * 100
-            table.insert(lines, string.format("%sCrit: %s%.1f%% %s(+%.0f%% dmg)",
-                C.WHITE, C.GRAY, totalCritChance, C.GRAY, critDmgBonus))
+            local critMin = Round(newMin * critMult)
+            local critMax = Round(newMax * critMult)
+            table.insert(lines, string.format("Crit: %s%d-%d%s (%.1f%% @ %.1fx)",
+                C.CRIT, critMin, critMax, C.RESET, totalCritChance, critMult))
         end
     end
 
@@ -388,12 +691,14 @@ local function FormatChanneledDamage(data, spellData, spellPower)
         local baseCritChance = Utils.GetPlayerSpellCritChance(spellData.school)
         local critBonus = Talents.GetCritChanceBonus(spellData.name, spellData.school)
         local totalCritChance = baseCritChance + critBonus
-        local critMultiplier = Talents.GetCritDamageMultiplier(spellData.school)
+        local critMult = Talents.GetCritDamageMultiplier(spellData.school, false, spellData.name)
 
         if totalCritChance > 0 then
-            local critDmgBonus = (critMultiplier - 1) * 100
-            table.insert(lines, string.format("%sCrit: %s%.1f%% %s(+%.0f%% dmg)",
-                C.WHITE, C.GRAY, totalCritChance, C.GRAY, critDmgBonus))
+            -- Calculate per-tick crit damage
+            local newPerTick = Round(data.damageMin * multiplier + perTickBonus)
+            local critPerTick = Round(newPerTick * critMult)
+            table.insert(lines, string.format("Crit: %s%d%s/tick (%.1f%% @ %.1fx)",
+                C.CRIT, critPerTick, C.RESET, totalCritChance, critMult))
         end
     end
 
@@ -543,7 +848,7 @@ local function BuildTooltip(tooltip, spellID, originalData)
                         local newAbsorb = math.floor(baseAbsorb + bonusAbsorb)
                         return prefix .. schoolColor .. newAbsorb .. C.RESET .. suffix
                     end)
-                    newText = newText:gsub("(absorbing%s+)(%s+)(%d+)(%s+damage)", function(prefix, absorbStr, suffix)
+                    newText = newText:gsub("(absorbing%s+)(%d+)(%s+damage)", function(prefix, absorbStr, suffix)
                         local baseAbsorb = tonumber(absorbStr)
                         local newAbsorb = math.floor(baseAbsorb + bonusAbsorb)
                         return prefix .. schoolColor .. newAbsorb .. C.RESET .. suffix
@@ -561,9 +866,341 @@ local function BuildTooltip(tooltip, spellID, originalData)
         return true
     end
 
+    -- Special handling for physical abilities (weapon damage / AP / RAP based)
+    if spellData.isPhysical and not spellData.isSeal then
+        -- Get weapon damage and AP/RAP based on ability type
+        local wpnMin, wpnMax, ap, apLabel
+
+        -- Check if ability has both weapon% AND separate AP scaling
+        -- If so, use BASE weapon damage to avoid double-counting AP
+        local weaponPercent = spellData.weaponDamagePercent or 0
+        local apCoeff = spellData.apCoefficient or spellData.rapCoefficient or 0
+        local hasBothScalings = weaponPercent > 0 and apCoeff > 0
+
+        if spellData.isRanged then
+            ap = GetRangedAttackPower()
+            apLabel = "RAP"
+            if hasBothScalings then
+                -- Use base ranged damage (e.g., Steady Shot)
+                wpnMin, wpnMax = GetBaseRangedWeaponDamage()
+            else
+                -- Use total ranged damage
+                local speed, minDmg, maxDmg = UnitRangedDamage("player")
+                wpnMin = minDmg or 0
+                wpnMax = maxDmg or 0
+            end
+        else
+            ap = GetAttackPower()
+            apLabel = "AP"
+            if hasBothScalings then
+                -- Use base melee damage
+                wpnMin, wpnMax = GetBaseWeaponDamage()
+            else
+                -- Use total melee damage
+                wpnMin, wpnMax = GetMainHandWeaponDamage()
+            end
+        end
+
+        -- Calculate weapon damage portion
+        local dmgMin = wpnMin * weaponPercent
+        local dmgMax = wpnMax * weaponPercent
+
+        -- Add flat AP/RAP coefficient bonus (abilities like Bloodthirst)
+        local apBonus = 0
+        if apCoeff > 0 then
+            apBonus = ap * apCoeff
+            dmgMin = dmgMin + apBonus
+            dmgMax = dmgMax + apBonus
+        end
+
+        -- Add flat damage bonus (abilities like Heroic Strike, Sinister Strike)
+        local flatDmg = spellData.flatDamage or 0
+        if flatDmg > 0 then
+            dmgMin = dmgMin + flatDmg
+            dmgMax = dmgMax + flatDmg
+        end
+
+        -- Add SP bonus if applicable (some physical abilities scale with SP)
+        local spBonus = 0
+        if spellData.spCoeff and spellData.spCoeff > 0 then
+            spBonus = spellPower * spellData.spCoeff
+            dmgMin = dmgMin + spBonus
+            dmgMax = dmgMax + spBonus
+        end
+
+        -- Get multipliers using physical-specific function
+        local is2H = IsTwoHandedWeapon()
+        local physicalMultiplier = Talents.GetPhysicalMultiplier(spellData.name, is2H, spellData.school)
+        local auraMultiplier = 1.0
+        if SpellTooltips.Auras then
+            auraMultiplier = SpellTooltips.Auras.GetSchoolMultiplier(spellData.school)
+        end
+        local multiplier = physicalMultiplier * auraMultiplier
+
+        -- Apply multipliers
+        dmgMin = Round(dmgMin * multiplier)
+        dmgMax = Round(dmgMax * multiplier)
+
+        -- Update tooltip text with calculated damage
+        for i = 1, tooltip:NumLines() do
+            local textLeft = _G[tooltip:GetName() .. "TextLeft" .. i]
+            if textLeft then
+                local text = textLeft:GetText()
+                if text and text:len() > 10 then
+                    local newText = text
+                    -- Replace "X% weapon damage" pattern (generic - Crusader Strike, etc.)
+                    newText = newText:gsub("(%d+)%%%s*weapon%s+damage", function(pct)
+                        return schoolColor .. dmgMin .. "-" .. dmgMax .. C.RESET .. " damage"
+                    end)
+                    -- Replace "X% of weapon damage" pattern
+                    newText = newText:gsub("(%d+)%%%s+of%s+weapon%s+damage", function(pct)
+                        return schoolColor .. dmgMin .. "-" .. dmgMax .. C.RESET .. " damage"
+                    end)
+                    -- Replace "weapon damage plus X" pattern
+                    newText = newText:gsub("weapon%s+damage%s+plus%s+(%d+)", function(bonus)
+                        return schoolColor .. dmgMin .. "-" .. dmgMax .. C.RESET .. " damage"
+                    end)
+                    -- Replace "an additional X damage" or "plus X damage" patterns
+                    newText = newText:gsub("(plus%s+)(%d+)(%s+damage)", function(pre, dmg, post)
+                        return pre .. schoolColor .. Round(tonumber(dmg) * multiplier) .. C.RESET .. post
+                    end)
+                    -- Replace generic "X-Y damage" or "X to Y damage" in description
+                    newText = newText:gsub("(%d+)(%s+to%s+)(%d+)(%s+damage)", function(minStr, sep, maxStr, suffix)
+                        if weaponPercent > 0 then
+                            return schoolColor .. dmgMin .. C.RESET .. sep .. schoolColor .. dmgMax .. C.RESET .. suffix
+                        end
+                        return minStr .. sep .. maxStr .. suffix
+                    end)
+                    if newText ~= text then
+                        textLeft:SetText(newText)
+                    end
+                end
+            end
+        end
+
+        -- Add breakdown
+        tooltip:AddLine(" ")
+
+        -- Build damage description string based on what contributes
+        local components = {}
+        if weaponPercent > 0 then
+            table.insert(components, string.format("%.0f%% wpn", weaponPercent * 100))
+        end
+        if apCoeff > 0 then
+            table.insert(components, string.format("%.0f%% %s", apCoeff * 100, apLabel))
+        end
+        if flatDmg > 0 then
+            table.insert(components, string.format("+%d flat", flatDmg))
+        end
+        if spBonus > 0 then
+            table.insert(components, string.format("%.0f%% SP", (spellData.spCoeff or 0) * 100))
+        end
+
+        local componentStr = table.concat(components, " + ")
+        if componentStr ~= "" then
+            tooltip:AddLine(string.format("Damage: %s%d-%d%s (%s)",
+                schoolColor, dmgMin, dmgMax, C.RESET, componentStr), 1, 1, 1)
+        else
+            tooltip:AddLine(string.format("Damage: %s%d-%d%s",
+                schoolColor, dmgMin, dmgMax, C.RESET), 1, 1, 1)
+        end
+
+        -- Talent/aura modifiers (before crit, matching spell format)
+        if physicalMultiplier > 1 then
+            local bonusPercent = math.floor((physicalMultiplier - 1) * 100 + 0.5)
+            tooltip:AddLine(string.format("%sTalents: %s+%d%%", C.WHITE, C.GRAY, bonusPercent), 1, 1, 1)
+        end
+        if auraMultiplier > 1 then
+            local bonusPercent = math.floor((auraMultiplier - 1) * 100 + 0.5)
+            tooltip:AddLine(string.format("%sAuras: %s+%d%%", C.WHITE, C.GRAY, bonusPercent), 1, 1, 1)
+        end
+
+        -- Crit info for physical abilities (after talents/auras, matching spell format)
+        local baseCritChance
+        if spellData.isRanged then
+            baseCritChance = Utils.GetPlayerRangedCritChance()
+        else
+            baseCritChance = Utils.GetPlayerMeleeCritChance()
+        end
+        local critBonus = Talents.GetCritChanceBonus(spellData.name, spellData.school)
+        local totalCritChance = baseCritChance + critBonus
+        local critMultiplier = Talents.GetCritDamageMultiplier(spellData.school, true, spellData.name)
+        local critMin = Round(dmgMin * critMultiplier)
+        local critMax = Round(dmgMax * critMultiplier)
+        tooltip:AddLine(string.format("Crit: %s%d-%d%s (%.1f%% @ %.1fx)",
+            C.CRIT, critMin, critMax, C.RESET, totalCritChance, critMultiplier), 1, 1, 1)
+
+        -- Special notes
+        if spellData.requiresBehind then
+            tooltip:AddLine(C.YELLOW .. "Requires: Behind target" .. C.RESET, 1, 1, 1)
+        end
+        if spellData.requiresStealth then
+            tooltip:AddLine(C.YELLOW .. "Requires: Stealth" .. C.RESET, 1, 1, 1)
+        end
+        if spellData.isBleed then
+            tooltip:AddLine(C.YELLOW .. "Bleed: Ignores armor" .. C.RESET, 1, 1, 1)
+        end
+        if spellData.isNormalized then
+            local normSpeed = GetNormalizedSpeed(spellData)
+            tooltip:AddLine(string.format("%sNormalized: %.1fs%s", C.GRAY, normSpeed, C.RESET), 1, 1, 1)
+        end
+
+        tooltip:Show()
+        return true
+    end
+
     -- Special handling for Seal spells (Paladin)
     if spellData.isSeal then
-        if spellData.isStackingDot then
+        -- Utility seals (Seal of Light, Seal of Wisdom) - just show proc chance
+        if spellData.isUtilitySeal then
+            local weaponSpeed = GetMainHandSpeed()
+
+            tooltip:AddLine(" ")
+            tooltip:AddLine(C.YELLOW .. "-- Seal --" .. C.RESET, 1, 1, 1)
+
+            if spellData.ppm then
+                local procChance = (spellData.ppm * weaponSpeed / 60) * 100
+                tooltip:AddLine(string.format("%sProc: %s%.1f%% (%d PPM @ %.2fs)",
+                    C.WHITE, C.GRAY, procChance, spellData.ppm, weaponSpeed), 1, 1, 1)
+            end
+
+            tooltip:Show()
+            return true
+        -- Seal of Command (physical/weapon damage based seal)
+        elseif spellData.isPhysical then
+            -- Use base weapon damage (SoC scales from weapon damage, not AP-modified damage)
+            local wpnMin, wpnMax = GetBaseWeaponDamage()
+            local weaponCoeff = spellData.weaponDamagePercent or 0.70
+            local spCoeff = spellData.spCoeff or 0
+
+            -- Proc damage: weapon damage * coeff + SP bonus
+            local dmgMin = wpnMin * weaponCoeff
+            local dmgMax = wpnMax * weaponCoeff
+            local spBonus = spellPower * spCoeff
+
+            -- Get multipliers
+            local schoolMultiplier = Talents.GetSchoolMultiplier(spellData.school)
+            local spellMultiplier = Talents.GetSpellMultiplier(spellData.name)
+            local auraMultiplier = 1.0
+            if SpellTooltips.Auras then
+                auraMultiplier = SpellTooltips.Auras.GetSchoolMultiplier(spellData.school)
+            end
+            local multiplier = schoolMultiplier * spellMultiplier * auraMultiplier
+
+            -- Apply multipliers
+            local finalMin = Round((dmgMin + spBonus) * multiplier)
+            local finalMax = Round((dmgMax + spBonus) * multiplier)
+
+            -- Judgement calculation (SP scaling only)
+            local judgementCoef = spellData.judgementCoef or 0.43
+            local judgementSPBonus = spellPower * judgementCoef
+            local judgementBaseMin, judgementBaseMax = 0, 0  -- Will be captured from tooltip
+
+            -- Stunned/Incapacitated damage calculation
+            -- Stunned damage = 2x base damage (doubles the proc)
+            local stunnedFinalMin, stunnedFinalMax
+            if spellData.stunnedWeaponCoeff then
+                stunnedFinalMin = finalMin * 2
+                stunnedFinalMax = finalMax * 2
+            end
+
+            -- Update tooltip text
+            for i = 1, tooltip:NumLines() do
+                local textLeft = _G[tooltip:GetName() .. "TextLeft" .. i]
+                if textLeft then
+                    local text = textLeft:GetText()
+                    if text then
+                        local newText = text
+                        -- Match "Holy damage equal to X% of normal weapon damage" pattern
+                        if text:find("Holy damage equal to") then
+                            newText = newText:gsub("(Holy damage equal to )(%d+)(%% of normal weapon damage)",
+                                function(prefix, pct, suffix)
+                                    return schoolColor .. finalMin .. "-" .. finalMax .. C.RESET .. " Holy damage"
+                                end)
+                        end
+                        -- Match judgement damage pattern ("causing 228 to 252 Holy damage")
+                        if text:find("causing") and text:find("Holy damage") then
+                            newText = newText:gsub("(causing%s+)(%d+)(%s+to%s+)(%d+)(%s+Holy%s+damage)", function(p1, minStr, p2, maxStr, suffix)
+                                local baseMin = tonumber(minStr)
+                                local baseMax = tonumber(maxStr)
+                                -- Capture base damage for crit calculation
+                                judgementBaseMin = baseMin
+                                judgementBaseMax = baseMax
+                                local newMin = Round((baseMin + judgementSPBonus) * multiplier)
+                                local newMax = Round((baseMax + judgementSPBonus) * multiplier)
+                                return p1 .. schoolColor .. newMin .. C.RESET .. p2 .. schoolColor .. newMax .. C.RESET .. suffix
+                            end)
+                        end
+                        -- Match stunned/incapacitated damage pattern ("X to Y if the target is stunned")
+                        if stunnedFinalMin and text:find("stunned") then
+                            newText = newText:gsub("(%d+)(%s+to%s+)(%d+)(%s+if%s+the%s+target%s+is%s+stunned)", function(minStr, p2, maxStr, suffix)
+                                return schoolColor .. stunnedFinalMin .. C.RESET .. p2 .. schoolColor .. stunnedFinalMax .. C.RESET .. suffix
+                            end)
+                        end
+                        if newText ~= text then
+                            textLeft:SetText(newText)
+                        end
+                    end
+                end
+            end
+
+            -- Add breakdown - Seal section
+            tooltip:AddLine(" ")
+            tooltip:AddLine(C.YELLOW .. "-- Seal --" .. C.RESET, 1, 1, 1)
+            tooltip:AddLine(string.format("Damage: %s%d-%d%s (%.0f%% weapon + %.0f%% SP)",
+                schoolColor, finalMin, finalMax, C.RESET, weaponCoeff * 100, spCoeff * 100), 1, 1, 1)
+
+            -- Proc chance for PPM-based seals
+            if spellData.ppm then
+                local weaponSpeed = GetMainHandSpeed()
+                local procChance = (spellData.ppm * weaponSpeed / 60) * 100
+                tooltip:AddLine(string.format("%sProc: %s%.1f%% (%d PPM @ %.2fs)",
+                    C.WHITE, C.GRAY, procChance, spellData.ppm, weaponSpeed), 1, 1, 1)
+            end
+
+            -- Crit info for Seal of Command (uses melee crit since it's weapon-based)
+            local baseCritChance = Utils.GetPlayerMeleeCritChance()
+            local critBonus = Talents.GetCritChanceBonus(spellData.name, spellData.school)
+            local totalCritChance = baseCritChance + critBonus
+            local critMultiplier = Talents.GetCritDamageMultiplier(spellData.school, true, spellData.name)
+            local critMin = Round(finalMin * critMultiplier)
+            local critMax = Round(finalMax * critMultiplier)
+            tooltip:AddLine(string.format("Crit: %s%d-%d%s (%.1f%% @ %.1fx)",
+                C.CRIT, critMin, critMax, C.RESET, totalCritChance, critMultiplier), 1, 1, 1)
+
+            -- Judgement section
+            tooltip:AddLine(" ")
+            tooltip:AddLine(C.YELLOW .. "-- Judgement --" .. C.RESET, 1, 1, 1)
+            local judgementBonusDmg = Round(judgementSPBonus * multiplier)
+            -- Calculate total judgement damage (base + SP bonus) * multiplier
+            local judgementTotalMin = Round((judgementBaseMin + judgementSPBonus) * multiplier)
+            local judgementTotalMax = Round((judgementBaseMax + judgementSPBonus) * multiplier)
+            tooltip:AddLine(string.format("Damage: %s%d-%d%s (+%d from %.0f%% SP)",
+                schoolColor, judgementTotalMin, judgementTotalMax, C.RESET, judgementBonusDmg, judgementCoef * 100), 1, 1, 1)
+
+            -- Judgement crit info (uses melee crit with x2 multiplier)
+            local judgementCritMin = Round(judgementTotalMin * critMultiplier)
+            local judgementCritMax = Round(judgementTotalMax * critMultiplier)
+            tooltip:AddLine(string.format("Crit: %s%d-%d%s (%.1f%% @ %.1fx)",
+                C.CRIT, judgementCritMin, judgementCritMax, C.RESET, totalCritChance, critMultiplier), 1, 1, 1)
+
+            -- Shared modifiers
+            local talentMultiplier = schoolMultiplier * spellMultiplier
+            if talentMultiplier > 1 or auraMultiplier > 1 then
+                tooltip:AddLine(" ")
+                if talentMultiplier > 1 then
+                    local bonusPercent = math.floor((talentMultiplier - 1) * 100 + 0.5)
+                    tooltip:AddLine(string.format("%sTalents: %s+%d%%", C.WHITE, C.GRAY, bonusPercent), 1, 1, 1)
+                end
+                if auraMultiplier > 1 then
+                    local bonusPercent = math.floor((auraMultiplier - 1) * 100 + 0.5)
+                    tooltip:AddLine(string.format("%sAuras: %s+%d%%", C.WHITE, C.GRAY, bonusPercent), 1, 1, 1)
+                end
+            end
+
+            tooltip:Show()
+            return true
+        elseif spellData.isStackingDot then
             -- Get all multipliers
             local schoolMultiplier = Talents.GetSchoolMultiplier(spellData.school)
             local spellMultiplier = Talents.GetSpellMultiplier(spellData.name)
@@ -590,11 +1227,12 @@ local function BuildTooltip(tooltip, spellID, originalData)
             local baseCoeff = is2H and spellData.baseCoeff2H or spellData.baseCoeff1H
             local coefficient = baseCoeff * weaponSpeed
 
-            -- Get weapon damage for seal formula (0.03 * avg weapon dmg)
-            local wpnMinDmg, wpnMaxDmg = GetMainHandWeaponDamage()
+            -- Get base weapon damage for seal formula (0.03 * avg weapon dmg)
+            -- SoR uses base weapon damage, not AP-modified damage
+            local wpnMinDmg, wpnMaxDmg = GetBaseWeaponDamage()
             local avgWeaponDmg = (wpnMinDmg + wpnMaxDmg) / 2
-            local weaponDmgCoeff = spellData.weaponDmgCoeff or 0
-            local weaponDmgBonus = weaponDmgCoeff * avgWeaponDmg
+            local weaponDamagePercent = spellData.weaponDamagePercent or 0
+            local weaponDmgBonus = weaponDamagePercent * avgWeaponDmg
 
             -- Get all multipliers
             local schoolMultiplier = Talents.GetSchoolMultiplier(spellData.school)
@@ -615,6 +1253,7 @@ local function BuildTooltip(tooltip, spellID, originalData)
 
             local judgementCoef = spellData.judgementCoef or 0.25
             local rawJudgementBonus = spellPower * judgementCoef
+            local judgementBaseMin, judgementBaseMax = 0, 0  -- Will be captured from tooltip
 
             for i = 1, tooltip:NumLines() do
                 local textLeft = _G[tooltip:GetName() .. "TextLeft" .. i]
@@ -625,8 +1264,9 @@ local function BuildTooltip(tooltip, spellID, originalData)
                         if text:find("additional") and text:find("Holy damage") then
                             newText = newText:gsub("(additional%s+)(%d+)(%s+Holy%s+damage)", function(prefix, dmgStr, suffix)
                                 local baseDmg = tonumber(dmgStr)
-                                -- Formula: (base + SP_bonus + wpn_bonus) * multiplier
-                                local newDmg = Round((baseDmg + rawBonusDamage) * multiplier)
+                                -- Base damage from tooltip already includes talent/aura multipliers
+                                -- Only add our SP/weapon bonus (with multiplier applied to bonus only)
+                                local newDmg = Round(baseDmg + rawBonusDamage * spBonusMultiplier)
                                 return prefix .. schoolColor .. newDmg .. C.RESET .. suffix
                             end)
                         end
@@ -634,9 +1274,13 @@ local function BuildTooltip(tooltip, spellID, originalData)
                             newText = newText:gsub("(cause%s+)(%d+)(%s+to%s+)(%d+)(%s+Holy%s+damage)", function(p1, minStr, p2, maxStr, suffix)
                                 local baseMin = tonumber(minStr)
                                 local baseMax = tonumber(maxStr)
-                                -- Formula: (base + judgement_bonus) * multiplier
-                                local newMin = Round((baseMin + rawJudgementBonus) * multiplier)
-                                local newMax = Round((baseMax + rawJudgementBonus) * multiplier)
+                                -- Capture base damage for crit calculation
+                                judgementBaseMin = baseMin
+                                judgementBaseMax = baseMax
+                                -- Base damage from tooltip already includes talent/aura multipliers
+                                -- Only add our judgement bonus (with multiplier applied to bonus only)
+                                local newMin = Round(baseMin + rawJudgementBonus * spBonusMultiplier)
+                                local newMax = Round(baseMax + rawJudgementBonus * spBonusMultiplier)
                                 return p1 .. schoolColor .. newMin .. C.RESET .. p2 .. schoolColor .. newMax .. C.RESET .. suffix
                             end)
                         end
@@ -651,17 +1295,114 @@ local function BuildTooltip(tooltip, spellID, originalData)
             local displayBonus = Round(rawBonusDamage * multiplier)
             local displayJudgementBonus = Round(rawJudgementBonus * multiplier)
 
+            -- Seal section
             tooltip:AddLine(" ")
-            tooltip:AddLine(string.format("Melee: %s+%d%s (%.1f%% SP @ %.2fs + %.0f%% WpnDmg)",
-                schoolColor, displayBonus, C.RESET, coefficient * 100, weaponSpeed, weaponDmgCoeff * 100), 1, 1, 1)
-            tooltip:AddLine(string.format("Judgement: %s+%d%s (%.0f%% SP)",
-                schoolColor, displayJudgementBonus, C.RESET, judgementCoef * 100), 1, 1, 1)
+            tooltip:AddLine(C.YELLOW .. "-- Seal --" .. C.RESET, 1, 1, 1)
+            tooltip:AddLine(string.format("Bonus: %s+%d%s (%.1f%% SP @ %.2fs)",
+                schoolColor, displayBonus, C.RESET, coefficient * 100, weaponSpeed), 1, 1, 1)
+            local sorPPM = 60 / weaponSpeed
+            tooltip:AddLine(string.format("%sProc: %s100%% (%.1f PPM @ %.2fs)",
+                C.WHITE, C.GRAY, sorPPM, weaponSpeed), 1, 1, 1)
+
+            -- Judgement section
+            tooltip:AddLine(" ")
+            tooltip:AddLine(C.YELLOW .. "-- Judgement --" .. C.RESET, 1, 1, 1)
+            -- Calculate total judgement damage (base already has multipliers, just add SP bonus)
+            local judgementTotalMin = Round(judgementBaseMin + rawJudgementBonus * spBonusMultiplier)
+            local judgementTotalMax = Round(judgementBaseMax + rawJudgementBonus * spBonusMultiplier)
+            tooltip:AddLine(string.format("Damage: %s%d-%d%s (+%d from %.0f%% SP)",
+                schoolColor, judgementTotalMin, judgementTotalMax, C.RESET, displayJudgementBonus, judgementCoef * 100), 1, 1, 1)
+
+            -- Judgement crit info (uses spell crit)
+            local baseCritChance = Utils.GetPlayerSpellCritChance(spellData.school)
+            local critBonus = Talents.GetCritChanceBonus(spellData.name, spellData.school)
+            local totalCritChance = baseCritChance + critBonus
+            local critMultiplier = Talents.GetCritDamageMultiplier(spellData.school, false, spellData.name)
+            local judgementCritMin = Round(judgementTotalMin * critMultiplier)
+            local judgementCritMax = Round(judgementTotalMax * critMultiplier)
+            tooltip:AddLine(string.format("Crit: %s%d-%d%s (%.1f%% @ %.1fx)",
+                C.CRIT, judgementCritMin, judgementCritMax, C.RESET, totalCritChance, critMultiplier), 1, 1, 1)
+
+            -- Shared modifiers
             local talentMultiplier = schoolMultiplier * spellMultiplier
-            if talentMultiplier > 1 then
-                tooltip:AddLine(string.format("Talents: %s+%.0f%%", C.GRAY, (talentMultiplier - 1) * 100), 1, 1, 1)
+            if talentMultiplier > 1 or auraMultiplier > 1 then
+                tooltip:AddLine(" ")
+                if talentMultiplier > 1 then
+                    local bonusPercent = math.floor((talentMultiplier - 1) * 100 + 0.5)
+                    tooltip:AddLine(string.format("%sTalents: %s+%d%%", C.WHITE, C.GRAY, bonusPercent), 1, 1, 1)
+                end
+                if auraMultiplier > 1 then
+                    local bonusPercent = math.floor((auraMultiplier - 1) * 100 + 0.5)
+                    tooltip:AddLine(string.format("%sAuras: %s+%d%%", C.WHITE, C.GRAY, bonusPercent), 1, 1, 1)
+                end
             end
-            if auraMultiplier > 1 then
-                tooltip:AddLine(string.format("Auras: %s+%.0f%%", C.GRAY, (auraMultiplier - 1) * 100), 1, 1, 1)
+        end
+
+        tooltip:Show()
+        return true
+    end
+
+    -- Generic multi-part spell handling (Seed of Corruption, etc.)
+    if spellData.parts then
+        -- Get shared multipliers
+        local schoolMultiplier = Talents.GetSchoolMultiplier(spellData.school)
+        local spellMultiplier = Talents.GetSpellMultiplier(spellData.name)
+        local auraMultiplier = 1.0
+        if SpellTooltips.Auras then
+            auraMultiplier = SpellTooltips.Auras.GetSchoolMultiplier(spellData.school)
+        end
+        local multiplier = schoolMultiplier * spellMultiplier * auraMultiplier
+
+        tooltip:AddLine(" ")
+
+        for _, part in ipairs(spellData.parts) do
+            -- Section header
+            tooltip:AddLine(C.YELLOW .. "-- " .. part.label .. " --" .. C.RESET, 1, 1, 1)
+
+            local partCoeff = part.coefficient or 0
+            local partDotCoeff = part.dotCoefficient or 0
+
+            if partDotCoeff > 0 then
+                -- DoT part
+                local ticks = part.ticks or 1
+                local perTickCoeff = partDotCoeff / ticks
+                local totalBonus = Round(spellPower * partDotCoeff * multiplier)
+                local perTickBonus = Round(spellPower * perTickCoeff * multiplier)
+                tooltip:AddLine(string.format("Bonus: %s+%d%s total (%s+%d%s/tick, %.1f%% SP)",
+                    schoolColor, totalBonus, C.RESET,
+                    schoolColor, perTickBonus, C.RESET,
+                    partDotCoeff * 100), 1, 1, 1)
+            elseif partCoeff > 0 then
+                -- Direct damage part
+                local bonus = Round(spellPower * partCoeff * multiplier)
+                tooltip:AddLine(string.format("Bonus: %s+%d%s (%.1f%% SP)",
+                    schoolColor, bonus, C.RESET, partCoeff * 100), 1, 1, 1)
+            end
+
+            tooltip:AddLine(" ")
+        end
+
+        -- Shared modifiers
+        local talentMultiplier = schoolMultiplier * spellMultiplier
+        if talentMultiplier > 1 then
+            local bonusPercent = math.floor((talentMultiplier - 1) * 100 + 0.5)
+            tooltip:AddLine(string.format("%sTalents: %s+%d%%", C.WHITE, C.GRAY, bonusPercent), 1, 1, 1)
+        end
+        if auraMultiplier > 1 then
+            local bonusPercent = math.floor((auraMultiplier - 1) * 100 + 0.5)
+            tooltip:AddLine(string.format("%sAuras: %s+%d%%", C.WHITE, C.GRAY, bonusPercent), 1, 1, 1)
+        end
+
+        -- Crit info for multi-part spells
+        if spellData.canCrit ~= false then
+            local baseCritChance = Utils.GetPlayerSpellCritChance(spellData.school)
+            local critBonus = Talents.GetCritChanceBonus(spellData.name, spellData.school)
+            local totalCritChance = baseCritChance + critBonus
+            local critMult = Talents.GetCritDamageMultiplier(spellData.school, false, spellData.name)
+
+            if totalCritChance > 0 then
+                tooltip:AddLine(string.format("Crit: %s%.1fx%s (%.1f%% chance)",
+                    C.CRIT, critMult, C.RESET, totalCritChance), 1, 1, 1)
             end
         end
 
@@ -697,6 +1438,35 @@ local function BuildTooltip(tooltip, spellID, originalData)
         tooltip:AddLine(line, 1, 1, 1)
     end
 
+    -- Fallback crit display when breakdown is empty but spell can crit
+    if #damageLines == 0 and spellData.canCrit ~= false and not spellData.isHealing then
+        local coefficient = spellData.coefficient or spellData.dotCoefficient or 0
+        if coefficient > 0 then
+            local modifiedCoeff = Talents.GetModifiedCoefficient(spellData)
+            local schoolMultiplier = Talents.GetSchoolMultiplier(spellData.school)
+            local spellMultiplier = Talents.GetSpellMultiplier(spellData.name)
+            local auraMultiplier = 1.0
+            if SpellTooltips.Auras then
+                auraMultiplier = SpellTooltips.Auras.GetSchoolMultiplier(spellData.school)
+            end
+            local multiplier = schoolMultiplier * spellMultiplier * auraMultiplier
+
+            local coeffStr = Utils.FormatCoefficient(modifiedCoeff)
+            local bonusDamage = Round(spellPower * modifiedCoeff * multiplier)
+            tooltip:AddLine(string.format("%sSP bonus: %s+%d (%s)", C.WHITE, C.GRAY, bonusDamage, coeffStr), 1, 1, 1)
+
+            local baseCritChance = Utils.GetPlayerSpellCritChance(spellData.school)
+            local critBonus = Talents.GetCritChanceBonus(spellData.name, spellData.school)
+            local totalCritChance = baseCritChance + critBonus
+            local critMult = Talents.GetCritDamageMultiplier(spellData.school, false, spellData.name)
+
+            if totalCritChance > 0 then
+                tooltip:AddLine(string.format("Crit: %s%.1fx%s (%.1f%% chance)",
+                    C.CRIT, critMult, C.RESET, totalCritChance), 1, 1, 1)
+            end
+        end
+    end
+
     tooltip:Show()
     return true
 end
@@ -723,8 +1493,15 @@ local function ProcessTooltip(tooltip, spellID)
     -- Skip spells that won't modify the tooltip
     local willModify = (spellData.coefficient or 0) > 0 or
                        (spellData.dotCoefficient or 0) > 0 or
+                       (spellData.weaponDamagePercent or 0) > 0 or
+                       (spellData.apCoefficient or 0) > 0 or
+                       (spellData.rapCoefficient or 0) > 0 or
+                       (spellData.flatDamage or 0) > 0 or
                        spellData.isSeal or
-                       spellData.isAbsorb
+                       spellData.isAbsorb or
+                       spellData.isPhysical or
+                       spellData.isRanged or
+                       spellData.parts
     if not willModify then
         DebugPrint("Spell has no modifying data, skipping:", spellData.name)
         return
@@ -736,7 +1513,7 @@ local function ProcessTooltip(tooltip, spellID)
 
     DebugPrint("Parsed - Name:", originalData.name, "Damage:", originalData.damageMin, "-", originalData.damageMax)
 
-    if not originalData.damageMin and not spellData.isSeal and not spellData.isAbsorb then
+    if not originalData.damageMin and not spellData.isSeal and not spellData.isAbsorb and not spellData.isPhysical and not spellData.parts then
         DebugPrint("No damage values found in tooltip")
         return
     end
@@ -772,6 +1549,61 @@ local function OnTooltipCleared(tooltip)
     lastProcessedSpellID = nil
 end
 
+-- Announce spell cooldown in /say when Alt-clicking
+local function AnnounceSpellCooldown(spellName, spellID)
+    if not spellName and not spellID then return end
+
+    -- Get cooldown info
+    local start, duration, enabled
+    if spellID then
+        start, duration, enabled = GetSpellCooldown(spellID)
+    else
+        start, duration, enabled = GetSpellCooldown(spellName)
+    end
+
+    -- Check if spell is on cooldown
+    if start and start > 0 and duration and duration > 1.5 then
+        local remaining = math.ceil((start + duration) - GetTime())
+        if remaining > 0 then
+            -- Format the message
+            local name = spellName or GetSpellInfo(spellID)
+            local message = name .. " CD - " .. remaining .. "s"
+            SendChatMessage(message, "SAY")
+        end
+    end
+end
+
+-- Hook for SpellButton clicks (spellbook)
+local function OnSpellButtonClick(self, button)
+    if IsAltKeyDown() and button == "LeftButton" then
+        local slot = SpellBook_GetSpellBookSlot(self)
+        if slot then
+            local spellName = GetSpellBookItemName(slot, SpellBookFrame.bookType)
+            if spellName then
+                AnnounceSpellCooldown(spellName, nil)
+            end
+        end
+    end
+end
+
+-- Hook for ActionButton clicks (action bars)
+local function OnActionButtonClick(self, button)
+    if IsAltKeyDown() and button == "LeftButton" then
+        local actionType, id, subType = GetActionInfo(self.action)
+        if actionType == "spell" then
+            local spellName = GetSpellInfo(id)
+            AnnounceSpellCooldown(spellName, id)
+        elseif actionType == "macro" then
+            -- Try to get spell from macro
+            local spellID = GetMacroSpell(id)
+            if spellID then
+                local spellName = GetSpellInfo(spellID)
+                AnnounceSpellCooldown(spellName, spellID)
+            end
+        end
+    end
+end
+
 -- Initialize hooks
 local function InitializeHooks()
     if GameTooltip.SetSpellByID then
@@ -782,6 +1614,33 @@ local function InitializeHooks()
     DebugPrint("Hooked OnTooltipSetSpell")
     GameTooltip:HookScript("OnTooltipCleared", OnTooltipCleared)
     DebugPrint("Hooked OnTooltipCleared")
+
+    -- Hook spellbook buttons for Alt-click cooldown announce
+    if SpellButton_OnClick then
+        hooksecurefunc("SpellButton_OnClick", OnSpellButtonClick)
+        DebugPrint("Hooked SpellButton_OnClick for CD announce")
+    end
+
+    -- Hook action buttons for Alt-click cooldown announce
+    for i = 1, 12 do
+        local btn = _G["ActionButton" .. i]
+        if btn then
+            btn:HookScript("OnClick", OnActionButtonClick)
+        end
+        -- Bonus action bars
+        btn = _G["BonusActionButton" .. i]
+        if btn then
+            btn:HookScript("OnClick", OnActionButtonClick)
+        end
+        -- Multi-bar buttons
+        for _, barName in ipairs({"MultiBarBottomLeft", "MultiBarBottomRight", "MultiBarRight", "MultiBarLeft"}) do
+            btn = _G[barName .. "Button" .. i]
+            if btn then
+                btn:HookScript("OnClick", OnActionButtonClick)
+            end
+        end
+    end
+    DebugPrint("Hooked ActionButtons for CD announce")
 end
 
 -- Event handler
@@ -799,7 +1658,8 @@ frame:SetScript("OnEvent", function(self, event, arg1)
 
     elseif event == "PLAYER_LOGIN" then
         InitializeHooks()
-        RefreshWeaponCache()
+        RefreshWeaponStats()
+        RefreshAttackPower()
         if C_Timer and C_Timer.After then
             C_Timer.After(1, function()
                 Talents.RefreshCache()
@@ -822,12 +1682,17 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         if SpellTooltips.Auras then
             SpellTooltips.Auras.InvalidateCache()
         end
+        -- Auras can affect AP (Blessing of Might, etc.)
+        InvalidateAPCache()
 
     elseif event == "PLAYER_EQUIPMENT_CHANGED" then
         -- arg1 is the equipment slot that changed (16 = main hand, 17 = off hand)
         InvalidateWeaponCache()
         -- Also invalidate talent cache since OHWS depends on weapon type
         Talents.InvalidateCache()
+
+    elseif event == "UNIT_ATTACK_POWER" and arg1 == "player" then
+        InvalidateAPCache()
     end
 end)
 
@@ -858,16 +1723,28 @@ SlashCmdList["SPELLTOOLTIPS"] = function(msg)
         end
         print(string.format("  ... %d total spells", count))
     elseif msg == "auras" then
-        print("|cFF00FF00SpellTooltips|r Active damage auras:")
+        print("|cFF00FF00SpellTooltips|r Active tracked auras:")
         if SpellTooltips.Auras then
             local activeAuras = SpellTooltips.Auras.GetActiveAuras()
             if #activeAuras == 0 then
                 print("  No tracked auras active")
             else
                 for _, aura in ipairs(activeAuras) do
-                    local bonusStr = string.format("+%.0f%% damage", aura.bonus * 100)
+                    local bonusStr
+                    if aura.isCritBuff and aura.critBonus then
+                        bonusStr = string.format("+%.0f%% crit", aura.critBonus * 100)
+                    elseif aura.isHasteBuff and aura.hasteBonus then
+                        bonusStr = string.format("+%.0f%% haste", aura.hasteBonus * 100)
+                    elseif aura.isAPBuff then
+                        bonusStr = "+AP buff"
+                    elseif aura.bonus and aura.bonus > 0 then
+                        bonusStr = string.format("+%.0f%% damage", aura.bonus * 100)
+                    else
+                        bonusStr = "active"
+                    end
                     local schoolStr = aura.school and (" (" .. aura.school .. ")") or ""
-                    print(string.format("  %s: %s%s", aura.name, bonusStr, schoolStr))
+                    local spellOnlyStr = aura.isSpellOnly and " [spell only]" or ""
+                    print(string.format("  %s: %s%s%s", aura.name, bonusStr, schoolStr, spellOnlyStr))
                 end
             end
         else
@@ -888,11 +1765,29 @@ SlashCmdList["SPELLTOOLTIPS"] = function(msg)
         print(string.format("  Spell mult (ImpSoR): %.2f", spellMult))
         print(string.format("  Aura mult: %.2f", auraMult))
         print(string.format("  Total mult: %.2f", schoolMult * spellMult * auraMult))
+    elseif msg == "physical" then
+        print("|cFF00FF00SpellTooltips|r Physical combat stats:")
+        local ap = GetAttackPower()
+        local speed = GetMainHandSpeed()
+        local is2H = IsTwoHandedWeapon()
+        local baseMin, baseMax = GetBaseWeaponDamage()
+        local totalMin, totalMax = GetMainHandWeaponDamage()
+        print(string.format("  Attack Power: %d", ap))
+        print(string.format("  Weapon Speed: %.2fs", speed))
+        print(string.format("  Weapon Type: %s", is2H and "2H" or "1H"))
+        print(string.format("  Base Weapon Damage: %d-%d", Round(baseMin), Round(baseMax)))
+        print(string.format("  Total Weapon Damage: %d-%d (with AP)", Round(totalMin), Round(totalMax)))
+        local apContrib = (ap / 14) * speed
+        print(string.format("  AP Contribution: +%d", Round(apContrib)))
     else
-        print("|cFF00FF00SpellTooltips|r v2.5.0 (Caster Spells Only)")
+        print("|cFF00FF00SpellTooltips|r v3.0.1")
         print("  /stt debug - Toggle debug mode")
         print("  /stt talents - Show detected talents")
         print("  /stt spells - Show registered spells")
         print("  /stt auras - Show active damage auras")
+        print("  Alt+Click spell - Announce cooldown in /say")
     end
 end
+
+-- Expose AnnounceSpellCooldown for external use
+SpellTooltips.AnnounceSpellCooldown = AnnounceSpellCooldown
