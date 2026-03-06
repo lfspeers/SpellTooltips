@@ -111,3 +111,19 @@ function SpellTooltips.Utils.GetPlayerSpellCritChance(school)
     end
     return maxCrit
 end
+
+-- Get player's melee crit chance
+function SpellTooltips.Utils.GetPlayerMeleeCritChance()
+    return GetCritChance() or 0
+end
+
+-- Get player's ranged crit chance
+function SpellTooltips.Utils.GetPlayerRangedCritChance()
+    return GetRangedCritChance() or 0
+end
+
+-- Get player's ranged attack power
+function SpellTooltips.Utils.GetPlayerRangedAttackPower()
+    local base, pos, neg = UnitRangedAttackPower("player")
+    return (base or 0) + (pos or 0) + (neg or 0)
+end

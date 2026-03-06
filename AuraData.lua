@@ -12,11 +12,13 @@ local cacheValid = false
 -- Note: Crit buffs (Moonkin Aura, Leader of the Pack, Totem of Wrath) are already
 -- reflected in GetSpellCritChance() / GetCritChance() so we don't track them here.
 -- Improved Sanctity Aura talent info (for checking when Sanctity Aura is active)
+-- Note: The +2% all damage bonus is already reflected in the game's weapon damage tooltip
 local IMPROVED_SANCTITY_AURA_TALENT = {
     tab = 3,
     index = 17,
     maxRanks = 2,
     perRank = 0.01,  -- 1% per rank = 2% at 2/2
+    isIncludedInWeaponDamage = true,  -- Already applied by game to weapon damage
 }
 
 SpellTooltips.AuraInfo = {
@@ -37,6 +39,25 @@ SpellTooltips.AuraInfo = {
         improvedTalent = IMPROVED_SANCTITY_AURA_TALENT,
     },
 
+    -- Vengeance: +1% damage per talent rank per stack, stacks 3x (Retribution talent)
+    -- At 5/5 with 3 stacks = +15% physical and holy damage
+    -- Buff procs after landing a critical strike
+    VENGEANCE = {
+        spellID = 20055,  -- Vengeance buff (rank 5, but all ranks use same buff name)
+        name = "Vengeance",
+        school = "all",  -- Affects physical and holy
+        class = "PALADIN",
+        isStacking = true,
+        maxStacks = 3,
+        -- Bonus is calculated dynamically based on talent ranks and stack count
+        talentInfo = {
+            tab = 3,
+            index = 2,
+            maxRanks = 5,
+            perRank = 0.01,  -- 1% per rank per stack
+        },
+    },
+
     -- =====================
     -- HUNTER AURAS
     -- =====================
@@ -49,6 +70,147 @@ SpellTooltips.AuraInfo = {
         bonus = 0.03,
         school = "all",
         class = "HUNTER",
+    },
+
+    -- =====================
+    -- MAGE AURAS
+    -- =====================
+
+    -- Arcane Empowerment: +3% all damage to party (Arcane Mage talent proc)
+    -- Triggers when mage deals Arcane damage, buff appears on party members
+    ARCANE_EMPOWERMENT = {
+        spellID = 31583,
+        name = "Arcane Empowerment",
+        bonus = 0.03,
+        school = "all",
+        class = "MAGE",
+    },
+
+    -- =====================
+    -- PRIEST AURAS
+    -- =====================
+
+    -- Power Infusion: +20% spell damage, -20% mana cost for 15s (Disc Priest)
+    POWER_INFUSION = {
+        spellID = 10060,
+        name = "Power Infusion",
+        bonus = 0.20,
+        school = "all",  -- Affects all spell damage
+        class = "PRIEST",
+        isSpellOnly = true,  -- Only affects spells, not physical
+    },
+
+    -- Shadowform: +15% shadow damage (Shadow Priest self-buff)
+    -- Note: Also tracked as talent, but buff must be active
+    SHADOWFORM = {
+        spellID = 15473,
+        name = "Shadowform",
+        bonus = 0.15,
+        school = "shadow",
+        class = "PRIEST",
+        isSelfOnly = true,
+    },
+
+    -- =====================
+    -- SHAMAN AURAS
+    -- =====================
+
+    -- Unleashed Rage: +10% AP to party after melee crit (Enhancement Shaman)
+    -- Note: This is AP not damage%, but tracked for display purposes
+    UNLEASHED_RAGE = {
+        spellID = 30809,
+        name = "Unleashed Rage",
+        bonus = 0.0,  -- AP buff, not direct damage %
+        school = "physical",
+        class = "SHAMAN",
+        isAPBuff = true,  -- Flag to indicate this is AP, not damage %
+        apBonus = 0.10,   -- +10% AP
+    },
+
+    -- =====================
+    -- WARLOCK AURAS
+    -- =====================
+
+    -- Demonic Pact: N/A in TBC (added in WotLK)
+
+    -- =====================
+    -- DRUID AURAS
+    -- =====================
+
+    -- Moonkin Aura: +5% spell crit (Balance Druid)
+    -- Note: Crit bonus already reflected in GetSpellCritChance(), tracked for display
+    MOONKIN_AURA = {
+        spellID = 24907,
+        name = "Moonkin Aura",
+        bonus = 0.0,  -- Crit, not damage %
+        school = "all",
+        class = "DRUID",
+        isCritBuff = true,
+        critBonus = 0.05,  -- +5% spell crit
+    },
+
+    -- Leader of the Pack: +5% melee/ranged crit (Feral Druid)
+    -- Note: Crit bonus already reflected in GetCritChance(), tracked for display
+    LEADER_OF_THE_PACK = {
+        spellID = 17007,
+        name = "Leader of the Pack",
+        bonus = 0.0,  -- Crit, not damage %
+        school = "physical",
+        class = "DRUID",
+        isCritBuff = true,
+        critBonus = 0.05,  -- +5% melee/ranged crit
+    },
+
+    -- =====================
+    -- WARRIOR AURAS
+    -- =====================
+
+    -- Battle Shout: +AP (tracked for display)
+    BATTLE_SHOUT = {
+        spellID = 2048,
+        name = "Battle Shout",
+        bonus = 0.0,
+        school = "physical",
+        class = "WARRIOR",
+        isAPBuff = true,
+    },
+
+    -- Commanding Shout: +HP (not damage, but tracked)
+    -- Not adding as it doesn't affect damage
+
+    -- =====================
+    -- CONSUMABLE/EXTERNAL BUFFS
+    -- =====================
+
+    -- Drums of Battle: +80 haste rating (Leatherworking)
+    DRUMS_OF_BATTLE = {
+        spellID = 35476,
+        name = "Drums of Battle",
+        bonus = 0.0,  -- Haste, not direct damage
+        school = "all",
+        isHasteBuff = true,
+    },
+
+    -- Bloodlust: +30% haste (Shaman - Horde)
+    BLOODLUST = {
+        spellID = 2825,
+        name = "Bloodlust",
+        bonus = 0.0,  -- Haste, not direct damage
+        school = "all",
+        class = "SHAMAN",
+        isHasteBuff = true,
+        hasteBonus = 0.30,
+    },
+
+    -- Heroism: +30% haste (Shaman - Alliance)
+    HEROISM = {
+        spellID = 32182,
+        name = "Heroism",
+        bonus = 0.0,  -- Haste, not direct damage
+        school = "all",
+        class = "SHAMAN",
+        isHasteBuff = true,
+        hasteBonus = 0.30,
     },
 }
 
@@ -131,6 +293,18 @@ function SpellTooltips.Auras.GetSchoolMultiplier(school)
 
             if applies then
                 local bonus = info.bonus or 0
+
+                -- Handle stacking buffs with talent-based bonuses (e.g., Vengeance)
+                if info.isStacking and info.talentInfo then
+                    local Talents = SpellTooltips.Talents
+                    if Talents and Talents.GetTalentRanks then
+                        local talent = info.talentInfo
+                        local ranks = Talents.GetTalentRanks(talent.tab, talent.index)
+                        local stacks = auraCache[key].stacks or 1
+                        bonus = ranks * talent.perRank * stacks
+                    end
+                end
+
                 if bonus > 0 then
                     multiplier = multiplier * (1 + bonus)
                     table.insert(contributingAuras, {
@@ -165,6 +339,7 @@ function SpellTooltips.Auras.GetSchoolMultiplier(school)
 end
 
 -- Get physical damage multiplier from active auras
+-- Note: Some bonuses are already included in weapon damage by the game and are skipped here
 -- Returns multiplier and list of contributing auras
 -- Auras are MULTIPLICATIVE with each other
 function SpellTooltips.Auras.GetPhysicalMultiplier()
@@ -181,6 +356,18 @@ function SpellTooltips.Auras.GetPhysicalMultiplier()
             -- Physical damage only benefits from "all" school auras
             if info.school == "all" then
                 local bonus = info.bonus or 0
+
+                -- Handle stacking buffs with talent-based bonuses (e.g., Vengeance)
+                if info.isStacking and info.talentInfo then
+                    local Talents = SpellTooltips.Talents
+                    if Talents and Talents.GetTalentRanks then
+                        local talent = info.talentInfo
+                        local ranks = Talents.GetTalentRanks(talent.tab, talent.index)
+                        local stacks = auraCache[key].stacks or 1
+                        bonus = ranks * talent.perRank * stacks
+                    end
+                end
+
                 if bonus > 0 then
                     multiplier = multiplier * (1 + bonus)
                     table.insert(contributingAuras, {
@@ -192,7 +379,8 @@ function SpellTooltips.Auras.GetPhysicalMultiplier()
             end
 
             -- Check for improved talent that adds ALL damage bonus
-            if info.improvedTalent then
+            -- Skip if already included in weapon damage by the game
+            if info.improvedTalent and not info.improvedTalent.isIncludedInWeaponDamage then
                 local Talents = SpellTooltips.Talents
                 if Talents and Talents.GetTalentRanks then
                     local talent = info.improvedTalent
@@ -225,13 +413,32 @@ function SpellTooltips.Auras.GetActiveAuras()
         if cacheEntry.active then
             local info = SpellTooltips.AuraInfo[key]
             if info then
-                table.insert(activeList, {
+                local auraEntry = {
                     key = key,
                     name = info.name,
                     bonus = info.bonus,
                     school = info.school,
                     stacks = cacheEntry.stacks,
-                })
+                }
+
+                -- Include special buff type info for display
+                if info.isCritBuff then
+                    auraEntry.isCritBuff = true
+                    auraEntry.critBonus = info.critBonus
+                end
+                if info.isHasteBuff then
+                    auraEntry.isHasteBuff = true
+                    auraEntry.hasteBonus = info.hasteBonus
+                end
+                if info.isAPBuff then
+                    auraEntry.isAPBuff = true
+                    auraEntry.apBonus = info.apBonus
+                end
+                if info.isSpellOnly then
+                    auraEntry.isSpellOnly = true
+                end
+
+                table.insert(activeList, auraEntry)
             end
         end
     end

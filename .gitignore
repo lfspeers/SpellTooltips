@@ -1,6 +1,7 @@
 # OS files
 .DS_Store
 Thumbs.db
+deploy.bat
 
 # Editor files
 *.swp
@@ -11,3 +12,4 @@ Thumbs.db
 
 # Build artifacts
 *.zip
+

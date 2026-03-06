@@ -166,7 +166,7 @@ function Tests.Report()
 
             -- Check if spell should crit but didn't
             if spellData and spellData.canCrit ~= false and hitCount > 10 and critCount == 0 then
-                print("  |cFFFFFF00NOTE: No crits recorded in %d hits (may need more samples)|r", hitCount)
+                print(string.format("  |cFFFFFF00NOTE: No crits recorded in %d hits (may need more samples)|r", hitCount))
             end
         end
     end
