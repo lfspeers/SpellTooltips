@@ -6,6 +6,7 @@ SpellTooltips.Auras = {}
 
 -- Cache for active auras (refreshed on UNIT_AURA)
 local auraCache = {}
+local activeAuraKeys = {}  -- List of active aura keys for fast iteration
 local cacheValid = false
 
 -- Aura definitions (damage multipliers only)
@@ -223,23 +224,39 @@ end
 -- Scan player buffs and update cache
 function SpellTooltips.Auras.ScanPlayerBuffs()
     auraCache = {}
+    activeAuraKeys = {}  -- Reset active keys list
+
+    -- Check if player exists first
+    if not UnitExists("player") then
+        cacheValid = true
+        return
+    end
 
     -- Scan player buffs (index 1-40)
     for i = 1, 40 do
-        local name, icon, count, debuffType, duration, expirationTime, source, isStealable,
-              nameplateShowPersonal, spellId = UnitBuff("player", i)
+        -- Wrap UnitBuff in pcall for safety
+        local success, name, icon, count, debuffType, duration, expirationTime, source, isStealable,
+              nameplateShowPersonal, spellId = pcall(UnitBuff, "player", i)
 
-        if not name then break end  -- No more buffs
+        if not success or not name then break end  -- Error or no more buffs
+
+        -- Validate count is a number
+        local stackCount = 1
+        if type(count) == "number" and count >= 1 then
+            stackCount = count
+        end
 
         -- Check if this buff matches any of our tracked auras
         local auraKey = buffNameToKey[name]
         if auraKey then
             auraCache[auraKey] = {
                 active = true,
-                stacks = count or 1,
+                stacks = stackCount,
                 source = source,
                 spellId = spellId,
             }
+            -- Add to active keys list for fast iteration
+            activeAuraKeys[#activeAuraKeys + 1] = auraKey
         end
     end
 
@@ -250,6 +267,7 @@ end
 function SpellTooltips.Auras.InvalidateCache()
     cacheValid = false
     auraCache = {}
+    activeAuraKeys = {}  -- Clear active keys list
 end
 
 -- Refresh the cache if invalid
@@ -277,11 +295,12 @@ function SpellTooltips.Auras.GetSchoolMultiplier(school)
     local contributingAuras = {}
     local schoolLower = string.lower(school)
 
-    for key, info in pairs(SpellTooltips.AuraInfo) do
-        -- Check if aura buff is active on player
-        local isActive = auraCache[key] and auraCache[key].active
+    -- Iterate only over active auras (performance optimization)
+    for _, key in ipairs(activeAuraKeys) do
+        local info = SpellTooltips.AuraInfo[key]
+        local cacheEntry = auraCache[key]
 
-        if isActive then
+        if info and cacheEntry and cacheEntry.active then
             -- Check if this aura applies to the given school
             local applies = false
 
@@ -297,11 +316,21 @@ function SpellTooltips.Auras.GetSchoolMultiplier(school)
                 -- Handle stacking buffs with talent-based bonuses (e.g., Vengeance)
                 if info.isStacking and info.talentInfo then
                     local Talents = SpellTooltips.Talents
-                    if Talents and Talents.GetTalentRanks then
+                    -- Validate Talents module exists and has required function
+                    if Talents and type(Talents.GetTalentRanks) == "function" then
                         local talent = info.talentInfo
-                        local ranks = Talents.GetTalentRanks(talent.tab, talent.index)
-                        local stacks = auraCache[key].stacks or 1
-                        bonus = ranks * talent.perRank * stacks
+                        -- Validate talent info structure
+                        if type(talent) == "table" and
+                           type(talent.tab) == "number" and
+                           type(talent.index) == "number" and
+                           type(talent.perRank) == "number" then
+                            -- Wrap in pcall for safety
+                            local success, ranks = pcall(Talents.GetTalentRanks, talent.tab, talent.index)
+                            if success and type(ranks) == "number" then
+                                local stacks = cacheEntry.stacks or 1
+                                bonus = ranks * talent.perRank * stacks
+                            end
+                        end
                     end
                 end
 
@@ -318,17 +347,27 @@ function SpellTooltips.Auras.GetSchoolMultiplier(school)
             -- Check for improved talent that adds ALL damage bonus
             if info.improvedTalent then
                 local Talents = SpellTooltips.Talents
-                if Talents and Talents.GetTalentRanks then
+                -- Validate Talents module exists and has required function
+                if Talents and type(Talents.GetTalentRanks) == "function" then
                     local talent = info.improvedTalent
-                    local ranks = Talents.GetTalentRanks(talent.tab, talent.index)
-                    local improvedBonus = ranks * talent.perRank
-                    if improvedBonus > 0 then
-                        multiplier = multiplier * (1 + improvedBonus)
-                        table.insert(contributingAuras, {
-                            name = "Improved " .. info.name,
-                            bonus = improvedBonus,
-                            key = key .. "_IMPROVED",
-                        })
+                    -- Validate talent info structure
+                    if type(talent) == "table" and
+                       type(talent.tab) == "number" and
+                       type(talent.index) == "number" and
+                       type(talent.perRank) == "number" then
+                        -- Wrap in pcall for safety
+                        local success, ranks = pcall(Talents.GetTalentRanks, talent.tab, talent.index)
+                        if success and type(ranks) == "number" then
+                            local improvedBonus = ranks * talent.perRank
+                            if improvedBonus > 0 then
+                                multiplier = multiplier * (1 + improvedBonus)
+                                table.insert(contributingAuras, {
+                                    name = "Improved " .. info.name,
+                                    bonus = improvedBonus,
+                                    key = key .. "_IMPROVED",
+                                })
+                            end
+                        end
                     end
                 end
             end
@@ -348,11 +387,12 @@ function SpellTooltips.Auras.GetPhysicalMultiplier()
     local multiplier = 1.0
     local contributingAuras = {}
 
-    for key, info in pairs(SpellTooltips.AuraInfo) do
-        -- Check if aura buff is active on player
-        local isActive = auraCache[key] and auraCache[key].active
+    -- Iterate only over active auras (performance optimization)
+    for _, key in ipairs(activeAuraKeys) do
+        local info = SpellTooltips.AuraInfo[key]
+        local cacheEntry = auraCache[key]
 
-        if isActive then
+        if info and cacheEntry and cacheEntry.active then
             -- Physical damage only benefits from "all" school auras
             if info.school == "all" then
                 local bonus = info.bonus or 0
@@ -360,11 +400,21 @@ function SpellTooltips.Auras.GetPhysicalMultiplier()
                 -- Handle stacking buffs with talent-based bonuses (e.g., Vengeance)
                 if info.isStacking and info.talentInfo then
                     local Talents = SpellTooltips.Talents
-                    if Talents and Talents.GetTalentRanks then
+                    -- Validate Talents module exists and has required function
+                    if Talents and type(Talents.GetTalentRanks) == "function" then
                         local talent = info.talentInfo
-                        local ranks = Talents.GetTalentRanks(talent.tab, talent.index)
-                        local stacks = auraCache[key].stacks or 1
-                        bonus = ranks * talent.perRank * stacks
+                        -- Validate talent info structure
+                        if type(talent) == "table" and
+                           type(talent.tab) == "number" and
+                           type(talent.index) == "number" and
+                           type(talent.perRank) == "number" then
+                            -- Wrap in pcall for safety
+                            local success, ranks = pcall(Talents.GetTalentRanks, talent.tab, talent.index)
+                            if success and type(ranks) == "number" then
+                                local stacks = cacheEntry.stacks or 1
+                                bonus = ranks * talent.perRank * stacks
+                            end
+                        end
                     end
                 end
 
@@ -382,17 +432,27 @@ function SpellTooltips.Auras.GetPhysicalMultiplier()
             -- Skip if already included in weapon damage by the game
             if info.improvedTalent and not info.improvedTalent.isIncludedInWeaponDamage then
                 local Talents = SpellTooltips.Talents
-                if Talents and Talents.GetTalentRanks then
+                -- Validate Talents module exists and has required function
+                if Talents and type(Talents.GetTalentRanks) == "function" then
                     local talent = info.improvedTalent
-                    local ranks = Talents.GetTalentRanks(talent.tab, talent.index)
-                    local improvedBonus = ranks * talent.perRank
-                    if improvedBonus > 0 then
-                        multiplier = multiplier * (1 + improvedBonus)
-                        table.insert(contributingAuras, {
-                            name = "Improved " .. info.name,
-                            bonus = improvedBonus,
-                            key = key .. "_IMPROVED",
-                        })
+                    -- Validate talent info structure
+                    if type(talent) == "table" and
+                       type(talent.tab) == "number" and
+                       type(talent.index) == "number" and
+                       type(talent.perRank) == "number" then
+                        -- Wrap in pcall for safety
+                        local success, ranks = pcall(Talents.GetTalentRanks, talent.tab, talent.index)
+                        if success and type(ranks) == "number" then
+                            local improvedBonus = ranks * talent.perRank
+                            if improvedBonus > 0 then
+                                multiplier = multiplier * (1 + improvedBonus)
+                                table.insert(contributingAuras, {
+                                    name = "Improved " .. info.name,
+                                    bonus = improvedBonus,
+                                    key = key .. "_IMPROVED",
+                                })
+                            end
+                        end
                     end
                 end
             end

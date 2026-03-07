@@ -36,8 +36,83 @@ SpellTooltips.SpellData = {}
     }
 ]]
 
+-- Valid damage schools for validation
+local VALID_SCHOOLS = {
+    physical = true,
+    holy = true,
+    fire = true,
+    nature = true,
+    frost = true,
+    shadow = true,
+    arcane = true,
+    frostfire = true,
+    spellfire = true,
+    shadowfrost = true,
+    holyfire = true,
+    healing = true,
+}
+
+-- Validate spell data structure
+-- Returns: isValid (boolean), errorMessage (string or nil)
+function SpellTooltips.ValidateSpellData(spellData)
+    if type(spellData) ~= "table" then
+        return false, "spellData is not a table"
+    end
+
+    -- Required field: name
+    if not spellData.name or type(spellData.name) ~= "string" or spellData.name == "" then
+        return false, "missing or invalid name"
+    end
+
+    -- Required field: school (must be valid)
+    if not spellData.school or type(spellData.school) ~= "string" then
+        return false, "missing or invalid school"
+    end
+    if not VALID_SCHOOLS[string.lower(spellData.school)] then
+        return false, "unknown school: " .. tostring(spellData.school)
+    end
+
+    -- Validate numeric fields if present
+    local numericFields = {
+        "coefficient", "dotCoefficient", "castTime", "ticks",
+        "weaponDamagePercent", "apCoefficient", "rapCoefficient",
+        "flatDamage", "normalizedSpeed"
+    }
+    for _, field in ipairs(numericFields) do
+        if spellData[field] ~= nil then
+            if type(spellData[field]) ~= "number" then
+                return false, field .. " is not a number"
+            end
+        end
+    end
+
+    -- Validate boolean fields if present
+    local booleanFields = {
+        "isChanneled", "isDot", "isHealing", "isPhysical",
+        "isRanged", "isNormalized", "isSeal", "isAbsorb",
+        "isBleed", "requiresBehind", "requiresStealth"
+    }
+    for _, field in ipairs(booleanFields) do
+        if spellData[field] ~= nil then
+            if type(spellData[field]) ~= "boolean" then
+                return false, field .. " is not a boolean"
+            end
+        end
+    end
+
+    return true, nil
+end
+
 -- Lookup spell data by spell ID
 function SpellTooltips.GetSpellDataByID(spellID)
+    -- Validate spellID is a positive integer
+    if type(spellID) ~= "number" then
+        return nil
+    end
+    if spellID ~= math.floor(spellID) or spellID < 1 then
+        return nil
+    end
+
     return SpellTooltips.SpellData[spellID]
 end
 

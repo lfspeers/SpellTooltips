@@ -29,6 +29,8 @@ local combatCache = {
     weaponValid = false,
     weaponSpeed = 2.0,
     is2H = false,
+    is1H = false,
+    isDagger = false,
     -- Attack power (invalidated by UNIT_ATTACK_POWER, UNIT_AURA)
     apValid = false,
     attackPower = 0,
@@ -40,6 +42,59 @@ local combatCache = {
     baseWeaponMax = 0,
 }
 
+-- Tooltip-scope multiplier cache (reset per tooltip to avoid recalculating)
+-- This avoids calling GetSchoolMultiplier/GetSpellMultiplier multiple times per tooltip
+local tooltipCache = {
+    school = nil,
+    spellName = nil,
+    schoolMultiplier = nil,
+    spellMultiplier = nil,
+    auraMultiplier = nil,
+}
+
+-- Reset tooltip cache for new spell
+local function ResetTooltipCache()
+    tooltipCache.school = nil
+    tooltipCache.spellName = nil
+    tooltipCache.schoolMultiplier = nil
+    tooltipCache.spellMultiplier = nil
+    tooltipCache.auraMultiplier = nil
+end
+
+-- Get cached school multiplier (calculates once per tooltip)
+local function GetCachedSchoolMultiplier(school)
+    if tooltipCache.school == school and tooltipCache.schoolMultiplier then
+        return tooltipCache.schoolMultiplier
+    end
+    tooltipCache.school = school
+    tooltipCache.schoolMultiplier = Talents and Talents.GetSchoolMultiplier(school) or 1.0
+    return tooltipCache.schoolMultiplier
+end
+
+-- Get cached aura multiplier (calculates once per tooltip)
+local function GetCachedAuraMultiplier(school)
+    if tooltipCache.school == school and tooltipCache.auraMultiplier then
+        return tooltipCache.auraMultiplier
+    end
+    tooltipCache.school = school
+    if SpellTooltips.Auras and SpellTooltips.Auras.GetSchoolMultiplier then
+        tooltipCache.auraMultiplier = SpellTooltips.Auras.GetSchoolMultiplier(school)
+    else
+        tooltipCache.auraMultiplier = 1.0
+    end
+    return tooltipCache.auraMultiplier
+end
+
+-- Get cached spell multiplier (calculates once per tooltip)
+local function GetCachedSpellMultiplier(spellName)
+    if tooltipCache.spellName == spellName and tooltipCache.spellMultiplier then
+        return tooltipCache.spellMultiplier
+    end
+    tooltipCache.spellName = spellName
+    tooltipCache.spellMultiplier = Talents and Talents.GetSpellMultiplier(spellName) or 1.0
+    return tooltipCache.spellMultiplier
+end
+
 -- Debug mode flag (off by default)
 local DEBUG_MODE = false
 
@@ -49,9 +104,140 @@ local function DebugPrint(...)
     end
 end
 
+-- =====================
+-- SAFE GLOBAL ACCESS HELPERS
+-- =====================
+
+-- Safely get a global frame by name (uses rawget to avoid metamethod issues)
+local function SafeGetGlobalFrame(name)
+    if type(name) ~= "string" or name == "" then
+        return nil
+    end
+    local frame = rawget(_G, name)
+    if type(frame) ~= "table" then
+        return nil
+    end
+    return frame
+end
+
+-- Safely get a tooltip line text frame
+-- Returns the TextLeft frame or nil if not accessible
+local function SafeGetTooltipLine(tooltip, lineIndex)
+    -- Validate tooltip
+    if not tooltip or type(tooltip) ~= "table" then
+        return nil
+    end
+    if not tooltip.GetName or not tooltip.NumLines then
+        return nil
+    end
+
+    -- Bounds check lineIndex (reasonable max of 50 lines)
+    if type(lineIndex) ~= "number" or lineIndex < 1 or lineIndex > 50 then
+        return nil
+    end
+
+    -- Check against actual line count
+    local success, numLines = pcall(tooltip.NumLines, tooltip)
+    if not success or type(numLines) ~= "number" or lineIndex > numLines then
+        return nil
+    end
+
+    -- Get tooltip name and construct frame name
+    local tooltipName = tooltip:GetName()
+    if not tooltipName or type(tooltipName) ~= "string" then
+        return nil
+    end
+
+    local frameName = tooltipName .. "TextLeft" .. lineIndex
+    return SafeGetGlobalFrame(frameName)
+end
+
+-- =====================
+-- ERROR HANDLING HELPERS
+-- =====================
+
+-- Log an error without throwing (safe for event handlers)
+local function SafeErrorLog(context, err)
+    -- Always log errors (not just in debug mode)
+    print("|cFFFF0000[STT Error]|r " .. (context or "Unknown") .. ": " .. tostring(err or "nil"))
+    if DEBUG_MODE then
+        -- In debug mode, also print stack trace if available
+        local trace = debugstack and debugstack(2, 5, 0) or ""
+        if trace ~= "" then
+            print("|cFFFF8000[STT Stack]|r " .. trace)
+        end
+    end
+end
+
+-- Safely call a function, logging errors without crashing
+-- Returns: success (boolean), result or error message
+local function SafeCall(context, func, ...)
+    if type(func) ~= "function" then
+        SafeErrorLog(context, "Not a function: " .. type(func))
+        return false, "Not a function"
+    end
+
+    local args = {...}
+    local results = {pcall(function() return func(unpack(args)) end)}
+    local success = table.remove(results, 1)
+
+    if not success then
+        SafeErrorLog(context, results[1])
+        return false, results[1]
+    end
+
+    return true, unpack(results)
+end
+
+-- =====================
+-- ARITHMETIC SAFETY HELPERS
+-- =====================
+
+-- Check if a number is valid (not nil, NaN, or Infinity)
+local function IsValidNumber(n)
+    if type(n) ~= "number" then return false end
+    -- NaN check: NaN ~= NaN
+    if n ~= n then return false end
+    -- Infinity check
+    if n == math.huge or n == -math.huge then return false end
+    return true
+end
+
+-- Return a safe number, using fallback if invalid
+local function SafeNumber(n, fallback)
+    fallback = fallback or 0
+    if IsValidNumber(n) then
+        return n
+    end
+    return fallback
+end
+
+-- Safe division that handles zero and invalid values
+local function SafeDivide(num, denom, fallback)
+    fallback = fallback or 0
+    if not IsValidNumber(num) then return fallback end
+    if not IsValidNumber(denom) or denom == 0 then return fallback end
+    local result = num / denom
+    return IsValidNumber(result) and result or fallback
+end
+
+-- Clamp a number between min and max
+local function ClampNumber(n, minVal, maxVal)
+    n = SafeNumber(n, minVal)
+    if n < minVal then return minVal end
+    if n > maxVal then return maxVal end
+    return n
+end
+
+-- Safe rounding that handles invalid values
+local function SafeRound(x)
+    x = SafeNumber(x, 0)
+    return math.floor(x + 0.5)
+end
+
 -- Round to nearest integer (instead of floor/truncate)
 local function Round(x)
-    return math.floor(x + 0.5)
+    return SafeRound(x)
 end
 
 -- Color shortcuts
@@ -90,28 +276,60 @@ local function GetSchoolColor(school, isHealing)
     return SCHOOL_COLORS[string.lower(school)] or C.WHITE
 end
 
+-- One-handed weapon subtypes for classification
+local ONE_HANDED_SUBTYPES = {
+    ["One-Handed Axes"] = true,
+    ["One-Handed Maces"] = true,
+    ["One-Handed Swords"] = true,
+    ["Daggers"] = true,
+    ["Fist Weapons"] = true,
+}
+
 -- Refresh weapon stats (called on equipment change)
 local function RefreshWeaponStats()
-    -- Get weapon speed
+    -- Get weapon speed (with validation)
     local speed, _ = UnitAttackSpeed("player")
-    combatCache.weaponSpeed = speed or 2.0
-
-    -- Check if 2H weapon
-    local itemID = GetInventoryItemID("player", 16)
-    if itemID then
-        local _, _, _, _, _, _, _, _, itemEquipLoc = GetItemInfo(itemID)
-        combatCache.is2H = (itemEquipLoc == "INVTYPE_2HWEAPON")
+    if type(speed) == "number" and speed > 0 then
+        combatCache.weaponSpeed = speed
     else
-        combatCache.is2H = false
+        combatCache.weaponSpeed = 2.0  -- Default fallback
+    end
+
+    -- Reset weapon type flags
+    combatCache.is2H = false
+    combatCache.is1H = false
+    combatCache.isDagger = false
+
+    -- Check weapon type (with validated GetItemInfo)
+    local itemID = GetInventoryItemID("player", 16)
+    if itemID and type(itemID) == "number" then
+        local success, result = pcall(GetItemInfo, itemID)
+        if success and result then
+            -- GetItemInfo returns: itemName, itemLink, itemQuality, itemLevel, itemMinLevel,
+            --                      itemType, itemSubType, itemStackCount, itemEquipLoc, ...
+            local _, _, _, _, _, _, itemSubType, _, itemEquipLoc = GetItemInfo(itemID)
+            if type(itemEquipLoc) == "string" then
+                combatCache.is2H = (itemEquipLoc == "INVTYPE_2HWEAPON")
+            end
+            if type(itemSubType) == "string" then
+                combatCache.is1H = ONE_HANDED_SUBTYPES[itemSubType] or false
+                combatCache.isDagger = (itemSubType == "Daggers")
+            end
+        end
     end
 
     -- Get total weapon damage (includes AP contribution)
-    local minDmg, maxDmg, _, _, _, _ = UnitDamage("player")
-    combatCache.totalMinDmg = minDmg or 0
-    combatCache.totalMaxDmg = maxDmg or 0
+    local success, minDmg, maxDmg = pcall(UnitDamage, "player")
+    if success then
+        combatCache.totalMinDmg = (type(minDmg) == "number") and minDmg or 0
+        combatCache.totalMaxDmg = (type(maxDmg) == "number") and maxDmg or 0
+    else
+        combatCache.totalMinDmg = 0
+        combatCache.totalMaxDmg = 0
+    end
 
     combatCache.weaponValid = true
-    DebugPrint("Weapon stats refreshed - Speed:", combatCache.weaponSpeed, "2H:", combatCache.is2H)
+    DebugPrint("Weapon stats refreshed - Speed:", combatCache.weaponSpeed, "2H:", combatCache.is2H, "1H:", combatCache.is1H)
 end
 
 -- Refresh attack power (called on AP change or aura change)
@@ -128,16 +346,29 @@ local function ComputeBaseWeaponDamage()
     if not combatCache.apValid then RefreshAttackPower() end
 
     -- Refresh total damage (may have changed with AP)
-    local minDmg, maxDmg, _, _, _, _ = UnitDamage("player")
-    combatCache.totalMinDmg = minDmg or 0
-    combatCache.totalMaxDmg = maxDmg or 0
+    local success, minDmg, maxDmg = pcall(UnitDamage, "player")
+    if success then
+        combatCache.totalMinDmg = SafeNumber(minDmg, 0)
+        combatCache.totalMaxDmg = SafeNumber(maxDmg, 0)
+    end
 
     -- AP contribution to weapon damage: (AP / 14) * weaponSpeed
-    local apContribution = (combatCache.attackPower / 14) * combatCache.weaponSpeed
+    -- Use SafeDivide to prevent division by zero issues
+    local ap = SafeNumber(combatCache.attackPower, 0)
+    local speed = SafeNumber(combatCache.weaponSpeed, 2.0)
+    local apContribution = SafeDivide(ap, 14, 0) * speed
+    apContribution = SafeNumber(apContribution, 0)
 
-    -- Base weapon damage = total - AP contribution
-    combatCache.baseWeaponMin = math.max(0, combatCache.totalMinDmg - apContribution)
-    combatCache.baseWeaponMax = math.max(0, combatCache.totalMaxDmg - apContribution)
+    -- Base weapon damage = total - AP contribution (floor at 0)
+    local baseMin = SafeNumber(combatCache.totalMinDmg, 0) - apContribution
+    local baseMax = SafeNumber(combatCache.totalMaxDmg, 0) - apContribution
+    combatCache.baseWeaponMin = math.max(0, SafeNumber(baseMin, 0))
+    combatCache.baseWeaponMax = math.max(0, SafeNumber(baseMax, 0))
+
+    -- Ensure min <= max
+    if combatCache.baseWeaponMin > combatCache.baseWeaponMax then
+        combatCache.baseWeaponMin = combatCache.baseWeaponMax
+    end
 
     DebugPrint("Base weapon damage:", Round(combatCache.baseWeaponMin), "-", Round(combatCache.baseWeaponMax),
                "(AP contrib:", Round(apContribution), ")")
@@ -163,6 +394,12 @@ end
 local function IsTwoHandedWeapon()
     if not combatCache.weaponValid then RefreshWeaponStats() end
     return combatCache.is2H
+end
+
+-- Check if using one-handed weapon (uses cached value)
+local function IsOneHandedWeapon()
+    if not combatCache.weaponValid then RefreshWeaponStats() end
+    return combatCache.is1H
 end
 
 -- Get main hand weapon damage (total, includes AP - for seals that use modified damage)
@@ -215,29 +452,29 @@ local NORMALIZED_SPEEDS = {
     ["FERAL"] = 1.0,  -- Feral forms use 1.0 normalized speed
 }
 
--- Get normalized weapon speed for an ability
+-- Get normalized weapon speed for an ability (uses cached weapon type)
 local function GetNormalizedSpeed(spellData)
-    if spellData.normalizedSpeed then
+    if spellData and spellData.normalizedSpeed then
         return spellData.normalizedSpeed
     end
 
     -- Default normalization based on weapon type
-    if spellData.isRanged then
+    if spellData and spellData.isRanged then
         return NORMALIZED_SPEEDS.RANGED
     end
 
-    -- Check equipped weapon type
-    if IsTwoHandedWeapon() then
+    -- Ensure weapon cache is valid
+    if not combatCache.weaponValid then
+        RefreshWeaponStats()
+    end
+
+    -- Use cached weapon type (avoids expensive GetItemInfo call)
+    if combatCache.is2H then
         return NORMALIZED_SPEEDS.TWO_HAND
     end
 
-    -- Check for dagger (1H with faster normalization)
-    local itemID = GetInventoryItemID("player", 16)
-    if itemID then
-        local _, _, _, _, _, _, itemSubType = GetItemInfo(itemID)
-        if itemSubType == "Daggers" then
-            return NORMALIZED_SPEEDS.DAGGER
-        end
+    if combatCache.isDagger then
+        return NORMALIZED_SPEEDS.DAGGER
     end
 
     return NORMALIZED_SPEEDS.ONE_HAND
@@ -268,23 +505,28 @@ local function CalculatePhysicalDamage(spellData)
 
     -- Check if ability has both weapon% AND separate AP scaling
     -- If so, use BASE weapon damage to avoid double-counting AP
-    local weaponPercent = spellData.weaponDamagePercent or 0
-    local apCoeff = spellData.apCoefficient or spellData.rapCoefficient or 0
+    -- Clamp coefficients to reasonable ranges
+    local weaponPercent = ClampNumber(spellData.weaponDamagePercent or 0, 0, 10)
+    local apCoeff = ClampNumber(spellData.apCoefficient or spellData.rapCoefficient or 0, 0, 5)
     local hasBothScalings = weaponPercent > 0 and apCoeff > 0
 
     if spellData.isRanged then
-        ap = GetRangedAttackPower()
+        ap = SafeNumber(GetRangedAttackPower(), 0)
         if hasBothScalings then
             -- Use base ranged damage (e.g., Steady Shot: base weapon + RAP*0.20)
             weaponMin, weaponMax = GetBaseRangedWeaponDamage()
         else
             -- Use total ranged damage (e.g., Aimed Shot: 100% ranged damage)
-            local speed, minDmg, maxDmg = UnitRangedDamage("player")
-            weaponMin = minDmg or 0
-            weaponMax = maxDmg or 0
+            local success, speed, minDmg, maxDmg = pcall(UnitRangedDamage, "player")
+            if success then
+                weaponMin = SafeNumber(minDmg, 0)
+                weaponMax = SafeNumber(maxDmg, 0)
+            else
+                weaponMin, weaponMax = 0, 0
+            end
         end
     else
-        ap = GetAttackPower()
+        ap = SafeNumber(GetAttackPower(), 0)
         if hasBothScalings then
             -- Use base melee damage (avoids double-counting AP)
             weaponMin, weaponMax = GetBaseWeaponDamage()
@@ -294,21 +536,31 @@ local function CalculatePhysicalDamage(spellData)
         end
     end
 
+    -- Ensure weapon damage values are valid
+    weaponMin = SafeNumber(weaponMin, 0)
+    weaponMax = SafeNumber(weaponMax, 0)
+
     -- Calculate weapon damage portion
     local weaponDmgMin = weaponMin * weaponPercent
     local weaponDmgMax = weaponMax * weaponPercent
 
     -- Calculate flat AP coefficient bonus (separate from weapon damage)
-    local apBonus = ap * apCoeff
+    local apBonus = SafeNumber(ap * apCoeff, 0)
 
-    -- Add flat damage bonus
-    local flatDmg = spellData.flatDamage or 0
+    -- Add flat damage bonus (clamped to reasonable range)
+    local flatDmg = ClampNumber(spellData.flatDamage or 0, 0, 10000)
 
-    -- Total damage
-    local totalMin = weaponDmgMin + apBonus + flatDmg
-    local totalMax = weaponDmgMax + apBonus + flatDmg
+    -- Total damage (floor at 0)
+    local totalMin = math.max(0, SafeNumber(weaponDmgMin + apBonus + flatDmg, 0))
+    local totalMax = math.max(0, SafeNumber(weaponDmgMax + apBonus + flatDmg, 0))
 
-    return totalMin, totalMax, apBonus, (weaponDmgMin + weaponDmgMax) / 2
+    -- Ensure min <= max
+    if totalMin > totalMax then
+        totalMin = totalMax
+    end
+
+    local avgWeaponDmg = SafeDivide(weaponDmgMin + weaponDmgMax, 2, 0)
+    return totalMin, totalMax, apBonus, avgWeaponDmg
 end
 
 -- Build tooltip for physical abilities (AP/RAP scaling)
@@ -449,6 +701,19 @@ local PATTERNS = {
     NEXT_RANK = "Next rank",
 }
 
+-- Module-scope damage replacement patterns (avoids recreation each call)
+local DAMAGE_REPLACE_PATTERNS = {
+    "(%s)(%d+)(%s+%a+%s+damage%s+to%s)",
+    "(causing%s+)(%d+)(%s+%a+%s+damage)",
+    "(%s)(%d+)(%s+%a+%s+damage%s+every)",
+    "(%s)(%d+)(%s+%a+%s+damage%s+when)",
+    "(%s)(%d+)(%s+%a+%s+damage%s+for)",
+    "(inflicts%s+)(%d+)(%s+%a+%s+damage)",
+    "(causes%s+)(%d+)(%s+%a+%s+damage)",
+    "(deals%s+)(%d+)(%s+%a+%s+damage%.?)",
+    "(for%s+)(%d+)(%s+%a+%s+damage)",
+}
+
 -- Parse original tooltip into structured data
 local function ParseTooltip(tooltip)
     local data = {
@@ -548,13 +813,29 @@ end
 
 -- Calculate damage with spell power and talents
 local function CalculateDamage(baseDamage, spellPower, spellData)
-    if not spellData or not baseDamage then return baseDamage end
+    if not spellData then return SafeNumber(baseDamage, 0) end
 
-    local modifiedCoeff = Talents.GetModifiedCoefficient(spellData)
-    local multiplier = Talents.GetSchoolMultiplier(spellData.school)
-    local bonusDamage = spellPower * modifiedCoeff
+    baseDamage = SafeNumber(baseDamage, 0)
+    -- Clamp spell power to reasonable range (0-50000 for TBC)
+    spellPower = ClampNumber(spellPower, 0, 50000)
 
-    return Round((baseDamage + bonusDamage) * multiplier)
+    local modifiedCoeff = SafeNumber(Talents.GetModifiedCoefficient(spellData), 0)
+    -- Clamp coefficient to reasonable range
+    modifiedCoeff = ClampNumber(modifiedCoeff, 0, 5)
+
+    -- Use cached multiplier to avoid redundant calculations
+    local multiplier = SafeNumber(GetCachedSchoolMultiplier(spellData.school), 1.0)
+    -- Clamp multiplier to reasonable range
+    multiplier = ClampNumber(multiplier, 0.1, 10)
+
+    local bonusDamage = SafeNumber(spellPower * modifiedCoeff, 0)
+
+    local result = (baseDamage + bonusDamage) * multiplier
+    result = SafeNumber(result, 0)
+    -- Cap final result at a reasonable maximum
+    result = math.min(result, 9999999)
+
+    return Round(result)
 end
 
 -- Format the damage breakdown as a formula
@@ -786,20 +1067,8 @@ local function UpdateDamageInText(text, spellPower, spellData)
         -- Use per-tick coefficient for channeled/DoT spells, full coefficient otherwise
         local effectiveCoeff = (spellData.isChanneled or spellData.isDot) and perTickCoeff or modifiedCoeff
 
-        -- Various damage patterns
-        local patterns = {
-            "(%s)(%d+)(%s+%a+%s+damage%s+to%s)",
-            "(causing%s+)(%d+)(%s+%a+%s+damage)",
-            "(%s)(%d+)(%s+%a+%s+damage%s+every)",
-            "(%s)(%d+)(%s+%a+%s+damage%s+when)",
-            "(%s)(%d+)(%s+%a+%s+damage%s+for)",
-            "(inflicts%s+)(%d+)(%s+%a+%s+damage)",
-            "(causes%s+)(%d+)(%s+%a+%s+damage)",
-            "(deals%s+)(%d+)(%s+%a+%s+damage%.?)",
-            "(for%s+)(%d+)(%s+%a+%s+damage)",
-        }
-
-        for _, pattern in ipairs(patterns) do
+        -- Use module-scope patterns (avoids table recreation each call)
+        for _, pattern in ipairs(DAMAGE_REPLACE_PATTERNS) do
             newText = newText:gsub(pattern, function(prefix, dmgStr, suffix)
                 local dmg = tonumber(dmgStr)
                 local bonusDamage = spellPower * effectiveCoeff
@@ -824,10 +1093,33 @@ end
 
 -- Build tooltip for caster spells
 local function BuildTooltip(tooltip, spellID, originalData)
+    -- Validate tooltip has required methods
+    if not tooltip or type(tooltip) ~= "table" then
+        DebugPrint("BuildTooltip: invalid tooltip")
+        return false
+    end
+    if not tooltip.AddLine or not tooltip.NumLines or not tooltip.GetName then
+        DebugPrint("BuildTooltip: tooltip missing required methods")
+        return false
+    end
+
+    -- Validate spellID is a positive number
+    if type(spellID) ~= "number" or spellID < 1 then
+        DebugPrint("BuildTooltip: invalid spellID:", spellID)
+        return false
+    end
+
     local spellData = addon.GetSpellDataByID(spellID)
     if not spellData then return false end
 
-    local spellPower = addon.GetSpellPowerForSpell(spellData)
+    -- Validate spell data structure
+    local isValid, validationErr = addon.ValidateSpellData and addon.ValidateSpellData(spellData)
+    if addon.ValidateSpellData and not isValid then
+        DebugPrint("BuildTooltip: invalid spell data -", validationErr)
+        return false
+    end
+
+    local spellPower = SafeNumber(addon.GetSpellPowerForSpell(spellData), 0)
     local schoolColor = GetSchoolColor(spellData.school, spellData.isHealing)
 
     -- Special handling for Absorption spells
@@ -1471,8 +1763,8 @@ local function BuildTooltip(tooltip, spellID, originalData)
     return true
 end
 
--- Process tooltip
-local function ProcessTooltip(tooltip, spellID)
+-- Process tooltip (internal implementation)
+local function ProcessTooltipInternal(tooltip, spellID)
     -- Hold Shift to show original unmodified tooltip
     if IsShiftKeyDown() then
         return
@@ -1481,6 +1773,9 @@ local function ProcessTooltip(tooltip, spellID)
     if tooltipProcessed and lastProcessedSpellID == spellID then
         return
     end
+
+    -- Reset tooltip-scope multiplier cache for new spell
+    ResetTooltipCache()
 
     DebugPrint("Processing spellID:", spellID)
 
@@ -1526,6 +1821,14 @@ local function ProcessTooltip(tooltip, spellID)
     end
 end
 
+-- Process tooltip (protected wrapper)
+local function ProcessTooltip(tooltip, spellID)
+    local success, err = SafeCall("ProcessTooltip", ProcessTooltipInternal, tooltip, spellID)
+    if not success then
+        DebugPrint("ProcessTooltip failed for spellID:", spellID)
+    end
+end
+
 -- Hook for GameTooltip:SetSpellByID
 local function OnSetSpellByID(tooltip, spellID)
     tooltipProcessed = false
@@ -1534,12 +1837,20 @@ local function OnSetSpellByID(tooltip, spellID)
     end)
 end
 
--- Hook for OnTooltipSetSpell
-local function OnTooltipSetSpell(tooltip)
+-- Hook for OnTooltipSetSpell (internal implementation)
+local function OnTooltipSetSpellInternal(tooltip)
     tooltipProcessed = false
     local name, spellID = tooltip:GetSpell()
     if spellID then
         ProcessTooltip(tooltip, spellID)
+    end
+end
+
+-- Hook for OnTooltipSetSpell (protected wrapper)
+local function OnTooltipSetSpell(tooltip)
+    local success, err = SafeCall("OnTooltipSetSpell", OnTooltipSetSpellInternal, tooltip)
+    if not success then
+        DebugPrint("OnTooltipSetSpell failed")
     end
 end
 
@@ -1604,16 +1915,18 @@ local function OnActionButtonClick(self, button)
     end
 end
 
--- Initialize hooks
-local function InitializeHooks()
-    if GameTooltip.SetSpellByID then
+-- Initialize hooks (internal implementation)
+local function InitializeHooksInternal()
+    if GameTooltip and GameTooltip.SetSpellByID then
         hooksecurefunc(GameTooltip, "SetSpellByID", OnSetSpellByID)
         DebugPrint("Hooked SetSpellByID")
     end
-    GameTooltip:HookScript("OnTooltipSetSpell", OnTooltipSetSpell)
-    DebugPrint("Hooked OnTooltipSetSpell")
-    GameTooltip:HookScript("OnTooltipCleared", OnTooltipCleared)
-    DebugPrint("Hooked OnTooltipCleared")
+    if GameTooltip and GameTooltip.HookScript then
+        GameTooltip:HookScript("OnTooltipSetSpell", OnTooltipSetSpell)
+        DebugPrint("Hooked OnTooltipSetSpell")
+        GameTooltip:HookScript("OnTooltipCleared", OnTooltipCleared)
+        DebugPrint("Hooked OnTooltipCleared")
+    end
 
     -- Hook spellbook buttons for Alt-click cooldown announce
     if SpellButton_OnClick then
@@ -1621,30 +1934,41 @@ local function InitializeHooks()
         DebugPrint("Hooked SpellButton_OnClick for CD announce")
     end
 
-    -- Hook action buttons for Alt-click cooldown announce
+    -- Hook action buttons for Alt-click cooldown announce (with safe global access)
     for i = 1, 12 do
-        local btn = _G["ActionButton" .. i]
-        if btn then
-            btn:HookScript("OnClick", OnActionButtonClick)
+        local btn = rawget(_G, "ActionButton" .. i)
+        if btn and btn.HookScript then
+            local success = pcall(function() btn:HookScript("OnClick", OnActionButtonClick) end)
+            if not success then
+                DebugPrint("Failed to hook ActionButton" .. i)
+            end
         end
         -- Bonus action bars
-        btn = _G["BonusActionButton" .. i]
-        if btn then
-            btn:HookScript("OnClick", OnActionButtonClick)
+        btn = rawget(_G, "BonusActionButton" .. i)
+        if btn and btn.HookScript then
+            pcall(function() btn:HookScript("OnClick", OnActionButtonClick) end)
         end
         -- Multi-bar buttons
         for _, barName in ipairs({"MultiBarBottomLeft", "MultiBarBottomRight", "MultiBarRight", "MultiBarLeft"}) do
-            btn = _G[barName .. "Button" .. i]
-            if btn then
-                btn:HookScript("OnClick", OnActionButtonClick)
+            btn = rawget(_G, barName .. "Button" .. i)
+            if btn and btn.HookScript then
+                pcall(function() btn:HookScript("OnClick", OnActionButtonClick) end)
             end
         end
     end
     DebugPrint("Hooked ActionButtons for CD announce")
 end
 
--- Event handler
-frame:SetScript("OnEvent", function(self, event, arg1)
+-- Initialize hooks (protected wrapper)
+local function InitializeHooks()
+    local success, err = SafeCall("InitializeHooks", InitializeHooksInternal)
+    if not success then
+        print("|cFFFF0000[STT]|r Failed to initialize hooks - some features may not work")
+    end
+end
+
+-- Event handler (internal implementation)
+local function OnEventInternal(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == "SpellTooltips" then
         SpellTooltipsDB = SpellTooltipsDB or {}
         if SpellTooltipsDB.showOriginalModifier == nil then
@@ -1653,7 +1977,9 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         print("|cFF00FF00SpellTooltips|r loaded. Type /stt for commands.")
 
         local spellCount = 0
-        for _ in pairs(SpellTooltips.SpellData) do spellCount = spellCount + 1 end
+        if SpellTooltips.SpellData then
+            for _ in pairs(SpellTooltips.SpellData) do spellCount = spellCount + 1 end
+        end
         print("|cFF00FF00SpellTooltips|r", spellCount, "spells registered.")
 
     elseif event == "PLAYER_LOGIN" then
@@ -1662,24 +1988,30 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         RefreshAttackPower()
         if C_Timer and C_Timer.After then
             C_Timer.After(1, function()
-                Talents.RefreshCache()
+                if Talents and Talents.RefreshCache then
+                    Talents.RefreshCache()
+                end
             end)
-        else
+        elseif Talents and Talents.RefreshCache then
             Talents.RefreshCache()
         end
 
     elseif event == "CHARACTER_POINTS_CHANGED" or event == "PLAYER_TALENT_UPDATE" or event == "ACTIVE_TALENT_GROUP_CHANGED" then
-        Talents.InvalidateCache()
+        if Talents and Talents.InvalidateCache then
+            Talents.InvalidateCache()
+        end
         if C_Timer and C_Timer.After then
             C_Timer.After(0.1, function()
-                Talents.RefreshCache()
+                if Talents and Talents.RefreshCache then
+                    Talents.RefreshCache()
+                end
             end)
-        else
+        elseif Talents and Talents.RefreshCache then
             Talents.RefreshCache()
         end
 
     elseif event == "UNIT_AURA" and arg1 == "player" then
-        if SpellTooltips.Auras then
+        if SpellTooltips.Auras and SpellTooltips.Auras.InvalidateCache then
             SpellTooltips.Auras.InvalidateCache()
         end
         -- Auras can affect AP (Blessing of Might, etc.)
@@ -1688,11 +2020,22 @@ frame:SetScript("OnEvent", function(self, event, arg1)
     elseif event == "PLAYER_EQUIPMENT_CHANGED" then
         -- arg1 is the equipment slot that changed (16 = main hand, 17 = off hand)
         InvalidateWeaponCache()
-        -- Also invalidate talent cache since OHWS depends on weapon type
-        Talents.InvalidateCache()
+        -- Note: We NO LONGER invalidate talent cache here.
+        -- Weapon-conditional bonuses (OHWS, TWHS) are pre-computed separately in
+        -- schoolMultipliers1H/2H and physicalMultiplier1H/2H.
+        -- GetSchoolMultiplier() checks weapon type at lookup time using cached values.
+        -- This saves 100+ API calls on equipment changes.
 
     elseif event == "UNIT_ATTACK_POWER" and arg1 == "player" then
         InvalidateAPCache()
+    end
+end
+
+-- Event handler (protected wrapper)
+frame:SetScript("OnEvent", function(self, event, arg1)
+    local success, err = SafeCall("OnEvent:" .. (event or "nil"), OnEventInternal, self, event, arg1)
+    if not success then
+        DebugPrint("Event handler failed for:", event)
     end
 end)
 
@@ -1791,3 +2134,7 @@ end
 
 -- Expose AnnounceSpellCooldown for external use
 SpellTooltips.AnnounceSpellCooldown = AnnounceSpellCooldown
+
+-- Expose cached weapon type functions for TalentData.lua (performance optimization)
+SpellTooltips.IsOneHandedWeapon = IsOneHandedWeapon
+SpellTooltips.IsTwoHandedWeapon = IsTwoHandedWeapon

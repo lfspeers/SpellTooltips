@@ -7,6 +7,8 @@ SpellTooltips.Talents = {}
 -- Cache for talent ranks (refreshed on talent changes)
 local talentCache = {}
 local cacheValid = false
+local cacheTimestamp = 0
+local CACHE_MAX_AGE = 300  -- Force refresh if cache > 5 minutes old
 
 -- Pre-computed bonus caches (built once on login/talent change)
 local computedCache = {
@@ -41,11 +43,15 @@ local INVSLOT_MAINHAND = 16
 local function IsOneHandedWeaponEquipped()
     -- Check main hand weapon slot
     local itemLink = GetInventoryItemLink("player", INVSLOT_MAINHAND)
-    if not itemLink then return false end
+    if not itemLink or type(itemLink) ~= "string" or itemLink == "" then
+        return false
+    end
 
-    -- Get item subclass to determine weapon type
-    local _, _, _, _, _, _, itemSubType = GetItemInfo(itemLink)
-    if not itemSubType then return false end
+    -- Get item subclass to determine weapon type (with pcall for safety)
+    local success, _, _, _, _, _, _, itemSubType = pcall(GetItemInfo, itemLink)
+    if not success or not itemSubType or type(itemSubType) ~= "string" then
+        return false
+    end
 
     -- One-handed weapon types
     local oneHandedTypes = {
@@ -62,10 +68,14 @@ end
 -- Check if player has a two-handed weapon equipped
 local function IsTwoHandedWeaponEquipped()
     local itemLink = GetInventoryItemLink("player", INVSLOT_MAINHAND)
-    if not itemLink then return false end
+    if not itemLink or type(itemLink) ~= "string" or itemLink == "" then
+        return false
+    end
 
-    local _, _, _, _, _, _, itemSubType = GetItemInfo(itemLink)
-    if not itemSubType then return false end
+    local success, _, _, _, _, _, _, itemSubType = pcall(GetItemInfo, itemLink)
+    if not success or not itemSubType or type(itemSubType) ~= "string" then
+        return false
+    end
 
     local twoHandedTypes = {
         ["Two-Handed Axes"] = true,
@@ -1440,13 +1450,26 @@ SpellTooltips.TalentInfo = {
 
 -- Get the number of points in a specific talent
 function SpellTooltips.Talents.GetTalentRanks(tab, index)
+    -- Validate inputs
+    if type(tab) ~= "number" or type(index) ~= "number" then
+        return 0
+    end
+    -- Validate reasonable bounds (tabs 1-3, indices 1-30 in TBC)
+    if tab < 1 or tab > 3 or index < 1 or index > 30 then
+        return 0
+    end
+
     local cacheKey = tab .. "_" .. index
-    if cacheValid and talentCache[cacheKey] then
+    if cacheValid and talentCache[cacheKey] ~= nil then
         return talentCache[cacheKey]
     end
 
-    local name, iconTexture, tier, column, rank, maxRank, isExceptional, available = GetTalentInfo(tab, index)
-    local ranks = rank or 0
+    -- Wrap GetTalentInfo in pcall for safety
+    local success, name, iconTexture, tier, column, rank, maxRank = pcall(GetTalentInfo, tab, index)
+    local ranks = 0
+    if success and type(rank) == "number" then
+        ranks = rank
+    end
 
     talentCache[cacheKey] = ranks
     return ranks
@@ -1476,24 +1499,43 @@ function SpellTooltips.Talents.GetCoefficientBonus(spellName)
     return computedCache.coefficientBonuses[spellName] or 0
 end
 
+-- Valid schools for validation
+local VALID_SCHOOLS = {
+    physical = true, holy = true, fire = true, nature = true,
+    frost = true, shadow = true, arcane = true, frostfire = true,
+    spellfire = true, shadowfrost = true, holyfire = true, healing = true, all = true,
+}
+
 -- Get damage multiplier for a specific school
 -- Returns multiplier (e.g., 1.13 for 13% bonus) and list of contributing talents
 -- Also includes "all" school bonuses (like One-Handed Weapon Specialization)
 function SpellTooltips.Talents.GetSchoolMultiplier(school)
-    if not school then return 1.0, {} end
+    -- Validate school is a non-empty string
+    if not school or type(school) ~= "string" or school == "" then
+        return 1.0, {}
+    end
 
     EnsureComputedCache()
     school = string.lower(school)
+
+    -- Check against known valid schools
+    if not VALID_SCHOOLS[school] then
+        return 1.0, {}
+    end
 
     -- Get school-specific bonus + "all" school bonus
     local schoolBonus = computedCache.schoolMultipliers[school] or 0
     local allBonus = computedCache.schoolMultipliers["all"] or 0
 
     -- Add weapon-conditional bonuses if appropriate weapon is equipped
-    if IsOneHandedWeaponEquipped() then
+    -- Use cached weapon type functions from Core.lua for performance
+    local is1H = SpellTooltips.IsOneHandedWeapon and SpellTooltips.IsOneHandedWeapon() or IsOneHandedWeaponEquipped()
+    local is2H = SpellTooltips.IsTwoHandedWeapon and SpellTooltips.IsTwoHandedWeapon() or IsTwoHandedWeaponEquipped()
+
+    if is1H then
         schoolBonus = schoolBonus + (computedCache.schoolMultipliers1H[school] or 0)
         allBonus = allBonus + (computedCache.schoolMultipliers1H["all"] or 0)
-    elseif IsTwoHandedWeaponEquipped() then
+    elseif is2H then
         schoolBonus = schoolBonus + (computedCache.schoolMultipliers2H[school] or 0)
         allBonus = allBonus + (computedCache.schoolMultipliers2H["all"] or 0)
     end
@@ -1685,8 +1727,39 @@ end
 
 -- Ensure computed cache is valid
 EnsureComputedCache = function()
+    -- Check for cache staleness (force refresh after 5 minutes)
+    local currentTime = GetTime and GetTime() or 0
+    if computedCacheValid and (currentTime - cacheTimestamp) > CACHE_MAX_AGE then
+        computedCacheValid = false
+    end
+
     if not computedCacheValid then
-        BuildComputedCache()
+        -- Wrap BuildComputedCache in pcall for safety
+        local success, err = pcall(BuildComputedCache)
+        if not success then
+            -- Reset to safe defaults on error
+            computedCache.schoolMultipliers = {}
+            computedCache.schoolMultipliers1H = {}
+            computedCache.schoolMultipliers2H = {}
+            computedCache.spellMultipliers = {}
+            computedCache.spellMultipliersIncluded = {}
+            computedCache.coefficientBonuses = {}
+            computedCache.critBonusBySchool = {}
+            computedCache.critBonusBySpell = {}
+            computedCache.critBonusGlobal = 0
+            computedCache.critDamageBySchool = {}
+            computedCache.critDamageBySpell = {}
+            computedCache.critDamageGlobal = 0
+            computedCache.critDamagePhysical = 0
+            computedCache.physicalMultiplierGlobal = 0
+            computedCache.physicalMultiplierBySpell = {}
+            computedCache.physicalMultiplierBySchool = {}
+            computedCache.physicalMultiplier2H = 0
+            computedCache.physicalMultiplier1H = 0
+            computedCacheValid = true  -- Mark as valid to prevent infinite loops
+            print("|cFFFF0000[STT Error]|r BuildComputedCache failed: " .. tostring(err))
+        end
+        cacheTimestamp = currentTime
     end
 end
 
@@ -1695,9 +1768,16 @@ function SpellTooltips.Talents.RefreshCache()
     talentCache = {}
     cacheValid = true
 
-    -- Pre-populate cache for all tracked talents and build computed cache
+    -- Get player class once for filtering
+    local _, playerClass = UnitClass("player")
+
+    -- Pre-populate cache ONLY for player's class talents (performance optimization)
+    -- This reduces 100+ GetTalentInfo calls to ~30-40 for the player's class
     for key, talentInfo in pairs(SpellTooltips.TalentInfo) do
-        SpellTooltips.Talents.GetTalentRanks(talentInfo.tab, talentInfo.index)
+        -- Skip talents from other classes
+        if not talentInfo.class or talentInfo.class == playerClass then
+            SpellTooltips.Talents.GetTalentRanks(talentInfo.tab, talentInfo.index)
+        end
     end
 
     -- Build the computed bonus caches
@@ -1796,16 +1876,27 @@ end
 function SpellTooltips.Talents.GetCritChanceBonus(spellName, school)
     EnsureComputedCache()
 
-    local totalBonus = computedCache.critBonusGlobal
+    local totalBonus = computedCache.critBonusGlobal or 0
 
-    if school then
+    -- Validate school parameter
+    if school and type(school) == "string" and school ~= "" then
         local schoolLower = string.lower(school)
-        totalBonus = totalBonus + (computedCache.critBonusBySchool[schoolLower] or 0)
+        if VALID_SCHOOLS[schoolLower] then
+            totalBonus = totalBonus + (computedCache.critBonusBySchool[schoolLower] or 0)
+        end
     end
 
-    if spellName then
+    -- Validate spellName parameter
+    if spellName and type(spellName) == "string" and spellName ~= "" then
         totalBonus = totalBonus + (computedCache.critBonusBySpell[spellName] or 0)
     end
+
+    -- Clamp result to reasonable range (0-100%)
+    if type(totalBonus) ~= "number" then
+        totalBonus = 0
+    end
+    if totalBonus < 0 then totalBonus = 0 end
+    if totalBonus > 100 then totalBonus = 100 end
 
     return totalBonus
 end
