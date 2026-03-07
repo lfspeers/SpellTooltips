@@ -150,7 +150,7 @@ SpellTooltips.TalentInfo = {
     },
     PIERCING_ICE = {
         tab = 3,
-        index = 8,
+        index = 3,
         maxRanks = 3,
         perRank = 0.02,
         school = "frost",
@@ -191,7 +191,7 @@ SpellTooltips.TalentInfo = {
 
     -- Arcane Impact: +2% crit to Arcane Blast, Arcane Explosion
     ARCANE_IMPACT = {
-        tab = 1, index = 6, maxRanks = 3,
+        tab = 1, index = 7, maxRanks = 3,
         perRank = 0.02,
         affects = { "Arcane Blast", "Arcane Explosion" },
         type = "crit",
@@ -201,7 +201,7 @@ SpellTooltips.TalentInfo = {
 
     -- Arcane Instability: +1% crit to ALL spells (damage bonus already in GetSpellBonusDamage)
     ARCANE_INSTABILITY = {
-        tab = 1, index = 19, maxRanks = 3,
+        tab = 1, index = 14, maxRanks = 3,
         perRank = 0.01,
         type = "crit",
         name = "Arcane Instability",
@@ -210,7 +210,7 @@ SpellTooltips.TalentInfo = {
 
     -- Incineration: +2% crit to Fire Blast, Scorch
     INCINERATION = {
-        tab = 2, index = 1, maxRanks = 2,
+        tab = 2, index = 15, maxRanks = 2,
         perRank = 0.02,
         affects = { "Fire Blast", "Scorch" },
         type = "crit",
@@ -220,7 +220,7 @@ SpellTooltips.TalentInfo = {
 
     -- Critical Mass: +2% crit to ALL fire spells
     CRITICAL_MASS = {
-        tab = 2, index = 15, maxRanks = 3,
+        tab = 2, index = 11, maxRanks = 3,
         perRank = 0.02,
         school = "fire",
         type = "crit",
@@ -240,7 +240,7 @@ SpellTooltips.TalentInfo = {
 
     -- Shatter: +17% crit vs frozen targets per rank
     SHATTER = {
-        tab = 3, index = 11, maxRanks = 3,
+        tab = 3, index = 9, maxRanks = 3,
         perRank = 0.17,
         school = "frost",
         type = "conditional",
@@ -255,7 +255,7 @@ SpellTooltips.TalentInfo = {
 
     -- Spell Power: +25% crit damage bonus to ALL spells
     SPELL_POWER = {
-        tab = 1, index = 22, maxRanks = 2,
+        tab = 1, index = 23, maxRanks = 2,
         perRank = 0.25,
         type = "critdamage",
         name = "Spell Power",
@@ -412,7 +412,7 @@ SpellTooltips.TalentInfo = {
 
     -- Empowered Corruption: +12% coefficient per rank to Corruption
     EMPOWERED_CORRUPTION = {
-        tab = 1, index = 14, maxRanks = 3,
+        tab = 1, index = 21, maxRanks = 3,
         perRank = 0.12,
         affects = { "Corruption" },
         type = "coefficient",
@@ -422,7 +422,7 @@ SpellTooltips.TalentInfo = {
 
     -- Shadow and Flame: +4% coefficient per rank to Shadow Bolt and Incinerate
     SHADOW_AND_FLAME = {
-        tab = 3, index = 20, maxRanks = 5,
+        tab = 3, index = 18, maxRanks = 5,
         perRank = 0.04,
         affects = { "Shadow Bolt", "Incinerate" },
         type = "coefficient",
@@ -436,7 +436,7 @@ SpellTooltips.TalentInfo = {
 
     -- Shadow Mastery: +2% shadow damage per rank
     SHADOW_MASTERY = {
-        tab = 1, index = 21, maxRanks = 5,
+        tab = 1, index = 11, maxRanks = 5,
         perRank = 0.02,
         school = "shadow",
         type = "multiplier",
@@ -446,7 +446,7 @@ SpellTooltips.TalentInfo = {
 
     -- Contagion: +1% damage to Corruption, Curse of Agony, Seed of Corruption
     CONTAGION = {
-        tab = 1, index = 20, maxRanks = 5,
+        tab = 1, index = 18, maxRanks = 5,
         perRank = 0.01,
         affects = { "Corruption", "Curse of Agony", "Seed of Corruption" },
         type = "multiplier",
@@ -456,7 +456,7 @@ SpellTooltips.TalentInfo = {
 
     -- Improved Curse of Agony: +5% Curse of Agony damage per rank
     IMPROVED_CURSE_OF_AGONY = {
-        tab = 1, index = 7, maxRanks = 2,
+        tab = 1, index = 15, maxRanks = 2,
         perRank = 0.05,
         affects = { "Curse of Agony" },
         type = "multiplier",
@@ -466,7 +466,7 @@ SpellTooltips.TalentInfo = {
 
     -- Emberstorm: +2% fire damage per rank
     EMBERSTORM = {
-        tab = 3, index = 9, maxRanks = 5,
+        tab = 3, index = 8, maxRanks = 5,
         perRank = 0.02,
         school = "fire",
         type = "multiplier",
@@ -476,7 +476,7 @@ SpellTooltips.TalentInfo = {
 
     -- Improved Immolate: +5% Immolate damage per rank
     IMPROVED_IMMOLATE = {
-        tab = 3, index = 3, maxRanks = 5,
+        tab = 3, index = 4, maxRanks = 5,
         perRank = 0.05,
         affects = { "Immolate" },
         type = "multiplier",
@@ -490,7 +490,7 @@ SpellTooltips.TalentInfo = {
 
     -- Devastation: +1% crit to Destruction spells per rank
     DEVASTATION = {
-        tab = 3, index = 7, maxRanks = 5,
+        tab = 3, index = 11, maxRanks = 5,
         perRank = 0.01,
         affects = { "Shadow Bolt", "Incinerate", "Searing Pain", "Soul Fire", "Shadowburn",
                     "Conflagrate", "Shadowfury", "Immolate", "Rain of Fire", "Hellfire" },
@@ -501,7 +501,7 @@ SpellTooltips.TalentInfo = {
 
     -- Backlash: +1% crit to all spells per rank
     BACKLASH = {
-        tab = 3, index = 12, maxRanks = 3,
+        tab = 3, index = 21, maxRanks = 3,
         perRank = 0.01,
         type = "crit",
         name = "Backlash",
@@ -510,7 +510,7 @@ SpellTooltips.TalentInfo = {
 
     -- Improved Searing Pain: +crit to Searing Pain (4%/7%/10% - averaged to 3.33% per rank)
     IMPROVED_SEARING_PAIN = {
-        tab = 3, index = 5, maxRanks = 3,
+        tab = 3, index = 7, maxRanks = 3,
         perRank = 0.0333,
         affects = { "Searing Pain" },
         type = "crit",
@@ -524,7 +524,7 @@ SpellTooltips.TalentInfo = {
 
     -- Ruin: +100% crit damage to Destruction spells
     RUIN = {
-        tab = 3, index = 13, maxRanks = 1,
+        tab = 3, index = 9, maxRanks = 1,
         perRank = 1.00,
         affects = { "Shadow Bolt", "Incinerate", "Searing Pain", "Soul Fire", "Shadowburn",
                     "Conflagrate", "Shadowfury", "Immolate", "Rain of Fire", "Hellfire" },
@@ -539,7 +539,7 @@ SpellTooltips.TalentInfo = {
 
     -- Improved Shadow Bolt: +4% shadow damage taken after SB crit (ISB debuff)
     IMPROVED_SHADOW_BOLT = {
-        tab = 3, index = 1, maxRanks = 5,
+        tab = 3, index = 3, maxRanks = 5,
         perRank = 0.04,
         school = "shadow",
         type = "conditional",
@@ -550,7 +550,7 @@ SpellTooltips.TalentInfo = {
 
     -- Malediction: +1% spell damage taken by target with Curse of Shadows/Elements
     MALEDICTION = {
-        tab = 1, index = 24, maxRanks = 3,
+        tab = 1, index = 16, maxRanks = 3,
         perRank = 0.01,
         type = "conditional",
         condition = "target has Curse of Shadows/Elements",
@@ -560,7 +560,7 @@ SpellTooltips.TalentInfo = {
 
     -- Soul Siphon: +2% Drain Life/Soul damage per affliction on target
     SOUL_SIPHON = {
-        tab = 1, index = 6, maxRanks = 2,
+        tab = 1, index = 4, maxRanks = 2,
         perRank = 0.02,
         affects = { "Drain Life", "Drain Soul" },
         type = "conditional",
@@ -602,7 +602,7 @@ SpellTooltips.TalentInfo = {
 
     -- Empowered Healing: +4% coefficient to Greater Heal, Flash Heal, Binding Heal
     EMPOWERED_HEALING = {
-        tab = 2, index = 15, maxRanks = 5,
+        tab = 2, index = 19, maxRanks = 5,
         perRank = 0.04,
         affects = { "Greater Heal", "Flash Heal", "Binding Heal" },
         type = "coefficient",
@@ -626,7 +626,7 @@ SpellTooltips.TalentInfo = {
 
     -- Darkness: +2% shadow damage per rank
     DARKNESS = {
-        tab = 3, index = 3, maxRanks = 5,
+        tab = 3, index = 2, maxRanks = 5,
         perRank = 0.02,
         school = "shadow",
         type = "multiplier",
@@ -639,7 +639,7 @@ SpellTooltips.TalentInfo = {
 
     -- Searing Light: +5% damage to Smite, Holy Fire
     SEARING_LIGHT = {
-        tab = 2, index = 6, maxRanks = 2,
+        tab = 2, index = 4, maxRanks = 2,
         perRank = 0.05,
         affects = { "Smite", "Holy Fire" },
         type = "multiplier",
@@ -649,7 +649,7 @@ SpellTooltips.TalentInfo = {
 
     -- Focused Power: +2% damage to Smite, Mind Blast, Mass Dispel
     FOCUSED_POWER = {
-        tab = 1, index = 16, maxRanks = 2,
+        tab = 1, index = 18, maxRanks = 2,
         perRank = 0.02,
         affects = { "Smite", "Mind Blast" },
         type = "multiplier",
@@ -659,7 +659,7 @@ SpellTooltips.TalentInfo = {
 
     -- Spiritual Healing: +2% healing to ALL healing spells per rank
     SPIRITUAL_HEALING = {
-        tab = 2, index = 16, maxRanks = 5,
+        tab = 2, index = 5, maxRanks = 5,
         perRank = 0.02,
         type = "multiplier",
         isHealing = true,
@@ -673,7 +673,7 @@ SpellTooltips.TalentInfo = {
 
     -- Holy Specialization: +1% crit to Holy spells per rank
     HOLY_SPECIALIZATION = {
-        tab = 2, index = 3, maxRanks = 5,
+        tab = 2, index = 2, maxRanks = 5,
         perRank = 0.01,
         school = "holy",
         type = "crit",
@@ -693,7 +693,7 @@ SpellTooltips.TalentInfo = {
 
     -- Focused Will: +1% crit to all spells per rank
     FOCUSED_WILL = {
-        tab = 1, index = 20, maxRanks = 3,
+        tab = 1, index = 22, maxRanks = 3,
         perRank = 0.01,
         type = "crit",
         name = "Focused Will",
@@ -706,7 +706,7 @@ SpellTooltips.TalentInfo = {
 
     -- Shadow Weaving: +2% shadow damage taken (stacking debuff, max 5 stacks)
     SHADOW_WEAVING = {
-        tab = 3, index = 13, maxRanks = 5,
+        tab = 3, index = 1, maxRanks = 5,
         perRank = 0.02,
         school = "shadow",
         type = "conditional",
@@ -717,7 +717,7 @@ SpellTooltips.TalentInfo = {
 
     -- Misery: +1% spell damage taken by target (debuff)
     MISERY = {
-        tab = 3, index = 20, maxRanks = 5,
+        tab = 3, index = 21, maxRanks = 5,
         perRank = 0.01,
         type = "conditional",
         condition = "target has SW:P, Mind Flay, or VT (all spell damage)",
@@ -747,7 +747,7 @@ SpellTooltips.TalentInfo = {
 
     -- Wrath of Cenarius: +4% coefficient to Starfire per rank
     WRATH_OF_CENARIUS_STARFIRE = {
-        tab = 1, index = 22, maxRanks = 5,
+        tab = 1, index = 19, maxRanks = 5,
         perRank = 0.04,
         affects = { "Starfire" },
         type = "coefficient",
@@ -757,7 +757,7 @@ SpellTooltips.TalentInfo = {
 
     -- Wrath of Cenarius: +2% coefficient to Wrath per rank
     WRATH_OF_CENARIUS_WRATH = {
-        tab = 1, index = 22, maxRanks = 5,
+        tab = 1, index = 19, maxRanks = 5,
         perRank = 0.02,
         affects = { "Wrath" },
         type = "coefficient",
@@ -767,7 +767,7 @@ SpellTooltips.TalentInfo = {
 
     -- Empowered Touch: +10% coefficient to Healing Touch per rank
     EMPOWERED_TOUCH = {
-        tab = 3, index = 18, maxRanks = 2,
+        tab = 3, index = 16, maxRanks = 2,
         perRank = 0.10,
         affects = { "Healing Touch" },
         type = "coefficient",
@@ -777,7 +777,7 @@ SpellTooltips.TalentInfo = {
 
     -- Empowered Rejuvenation: +4% coefficient to all HoTs per rank
     EMPOWERED_REJUVENATION = {
-        tab = 3, index = 21, maxRanks = 5,
+        tab = 3, index = 17, maxRanks = 5,
         perRank = 0.04,
         affects = { "Rejuvenation", "Regrowth", "Lifebloom", "Tranquility" },
         type = "coefficient",
@@ -791,7 +791,7 @@ SpellTooltips.TalentInfo = {
 
     -- Moonfury: +2% damage to Starfire, Moonfire, Wrath per rank
     MOONFURY = {
-        tab = 1, index = 21, maxRanks = 5,
+        tab = 1, index = 11, maxRanks = 5,
         perRank = 0.02,
         affects = { "Starfire", "Moonfire", "Wrath" },
         type = "multiplier",
@@ -801,7 +801,7 @@ SpellTooltips.TalentInfo = {
 
     -- Gift of Nature: +2% healing to all healing spells per rank
     GIFT_OF_NATURE = {
-        tab = 3, index = 12, maxRanks = 5,
+        tab = 3, index = 8, maxRanks = 5,
         perRank = 0.02,
         type = "multiplier",
         isHealing = true,
@@ -825,7 +825,7 @@ SpellTooltips.TalentInfo = {
 
     -- Focused Starlight: +2% crit to Starfire, Wrath per rank
     FOCUSED_STARLIGHT = {
-        tab = 1, index = 2, maxRanks = 2,
+        tab = 1, index = 21, maxRanks = 2,
         perRank = 0.02,
         affects = { "Starfire", "Wrath" },
         type = "crit",
@@ -845,7 +845,7 @@ SpellTooltips.TalentInfo = {
 
     -- Natural Perfection: +1% crit to all spells per rank
     NATURAL_PERFECTION = {
-        tab = 3, index = 19, maxRanks = 3,
+        tab = 3, index = 18, maxRanks = 3,
         perRank = 0.01,
         type = "crit",
         name = "Natural Perfection",
@@ -858,7 +858,7 @@ SpellTooltips.TalentInfo = {
 
     -- Vengeance (Druid): +20% crit damage to Balance spells per rank
     VENGEANCE_DRUID = {
-        tab = 1, index = 17, maxRanks = 5,
+        tab = 1, index = 12, maxRanks = 5,
         perRank = 0.20,
         affects = { "Starfire", "Moonfire", "Wrath" },
         type = "critdamage",
@@ -946,7 +946,7 @@ SpellTooltips.TalentInfo = {
 
     -- Ranged Weapon Specialization: +1% ranged damage per rank (5 ranks)
     RANGED_WEAPON_SPEC = {
-        tab = 2, index = 22, maxRanks = 5,
+        tab = 2, index = 13, maxRanks = 5,
         perRank = 0.01,
         type = "ranged_multiplier",
         name = "Ranged Weapon Specialization",
@@ -979,7 +979,7 @@ SpellTooltips.TalentInfo = {
 
     -- Lethal Shots: +1% ranged crit per rank (5 ranks)
     LETHAL_SHOTS = {
-        tab = 2, index = 3, maxRanks = 5,
+        tab = 2, index = 4, maxRanks = 5,
         perRank = 0.01,
         type = "crit",
         isRanged = true,
@@ -989,7 +989,7 @@ SpellTooltips.TalentInfo = {
 
     -- Killer Instinct: +1% crit per rank (3 ranks)
     KILLER_INSTINCT = {
-        tab = 3, index = 16, maxRanks = 3,
+        tab = 3, index = 11, maxRanks = 3,
         perRank = 0.01,
         type = "crit",
         name = "Killer Instinct",
@@ -1021,7 +1021,7 @@ SpellTooltips.TalentInfo = {
 
     -- Concussion: +1% damage to Lightning Bolt, Chain Lightning, Shocks per rank
     CONCUSSION = {
-        tab = 1, index = 2, maxRanks = 5,
+        tab = 1, index = 3, maxRanks = 5,
         perRank = 0.01,
         affects = { "Lightning Bolt", "Chain Lightning", "Earth Shock", "Flame Shock", "Frost Shock" },
         type = "multiplier",
@@ -1031,7 +1031,7 @@ SpellTooltips.TalentInfo = {
 
     -- Call of Flame: +5% Fire Totem damage per rank
     CALL_OF_FLAME = {
-        tab = 1, index = 5, maxRanks = 3,
+        tab = 1, index = 1, maxRanks = 3,
         perRank = 0.05,
         affects = { "Searing Totem", "Magma Totem", "Fire Nova Totem" },
         type = "multiplier",
@@ -1041,7 +1041,7 @@ SpellTooltips.TalentInfo = {
 
     -- Purification: +2% healing to all healing spells per rank
     PURIFICATION = {
-        tab = 3, index = 14, maxRanks = 5,
+        tab = 3, index = 10, maxRanks = 5,
         perRank = 0.02,
         type = "multiplier",
         isHealing = true,
@@ -1055,7 +1055,7 @@ SpellTooltips.TalentInfo = {
 
     -- Call of Thunder: +1% crit to Lightning Bolt, Chain Lightning per rank
     CALL_OF_THUNDER = {
-        tab = 1, index = 8, maxRanks = 5,
+        tab = 1, index = 2, maxRanks = 5,
         perRank = 0.01,
         affects = { "Lightning Bolt", "Chain Lightning" },
         type = "crit",
@@ -1065,7 +1065,7 @@ SpellTooltips.TalentInfo = {
 
     -- Tidal Mastery: +1% crit to all healing and lightning spells per rank
     TIDAL_MASTERY = {
-        tab = 3, index = 11, maxRanks = 5,
+        tab = 3, index = 12, maxRanks = 5,
         perRank = 0.01,
         type = "crit",
         name = "Tidal Mastery",
@@ -1078,7 +1078,7 @@ SpellTooltips.TalentInfo = {
 
     -- Elemental Fury: +100% crit damage to elemental spells (1 rank)
     ELEMENTAL_FURY = {
-        tab = 1, index = 13, maxRanks = 1,
+        tab = 1, index = 5, maxRanks = 1,
         perRank = 1.00,
         affects = { "Lightning Bolt", "Chain Lightning", "Earth Shock", "Flame Shock", "Frost Shock",
                     "Fire Nova Totem", "Searing Totem", "Magma Totem" },
@@ -1093,7 +1093,7 @@ SpellTooltips.TalentInfo = {
 
     -- Elemental Mastery: Next spell guaranteed crit (talent ability)
     ELEMENTAL_MASTERY_TALENT = {
-        tab = 1, index = 16, maxRanks = 1,
+        tab = 1, index = 8, maxRanks = 1,
         perRank = 1.00,
         type = "conditional",
         condition = "next spell guaranteed critical strike",
@@ -1103,7 +1103,7 @@ SpellTooltips.TalentInfo = {
 
     -- Lightning Overload: Chance for extra LB/CL at 50% damage
     LIGHTNING_OVERLOAD = {
-        tab = 1, index = 20, maxRanks = 5,
+        tab = 1, index = 19, maxRanks = 5,
         perRank = 0.04,
         affects = { "Lightning Bolt", "Chain Lightning" },
         type = "conditional",
@@ -1114,7 +1114,7 @@ SpellTooltips.TalentInfo = {
 
     -- Healing Way: +6% Healing Wave per stack (max 3 stacks)
     HEALING_WAY = {
-        tab = 3, index = 13, maxRanks = 3,
+        tab = 3, index = 15, maxRanks = 3,
         perRank = 0.06,
         affects = { "Healing Wave" },
         type = "conditional",
@@ -1125,7 +1125,7 @@ SpellTooltips.TalentInfo = {
 
     -- Totem of Wrath: +3% crit to party (totem)
     TOTEM_OF_WRATH = {
-        tab = 1, index = 21, maxRanks = 1,
+        tab = 1, index = 20, maxRanks = 1,
         perRank = 0.03,
         type = "conditional",
         condition = "Totem of Wrath active (party aura)",
@@ -1139,7 +1139,7 @@ SpellTooltips.TalentInfo = {
 
     -- Weapon Mastery: +2% melee damage per rank (all weapons)
     WEAPON_MASTERY = {
-        tab = 2, index = 13, maxRanks = 5,
+        tab = 2, index = 15, maxRanks = 5,
         perRank = 0.02,
         type = "multiplier",
         name = "Weapon Mastery",
@@ -1149,7 +1149,7 @@ SpellTooltips.TalentInfo = {
 
     -- Dual Wield Specialization (Shaman): +3% off-hand damage per rank
     DUAL_WIELD_SPEC_SHAMAN = {
-        tab = 2, index = 19, maxRanks = 3,
+        tab = 2, index = 20, maxRanks = 3,
         perRank = 0.03,
         type = "multiplier",
         name = "Dual Wield Specialization",
@@ -1160,7 +1160,7 @@ SpellTooltips.TalentInfo = {
 
     -- Elemental Weapons: +10% Windfury/Flametongue/Frostbrand damage per rank
     ELEMENTAL_WEAPONS = {
-        tab = 2, index = 10, maxRanks = 3,
+        tab = 2, index = 7, maxRanks = 3,
         perRank = 0.10,
         affects = { "Windfury Weapon", "Flametongue Weapon", "Frostbrand Weapon" },
         type = "multiplier",
@@ -1171,7 +1171,7 @@ SpellTooltips.TalentInfo = {
 
     -- Unleashed Rage: +2% AP after melee crit per rank (buff)
     UNLEASHED_RAGE = {
-        tab = 2, index = 21, maxRanks = 5,
+        tab = 2, index = 17, maxRanks = 5,
         perRank = 0.02,
         type = "conditional",
         condition = "after melee critical strike (party buff)",
@@ -1182,7 +1182,7 @@ SpellTooltips.TalentInfo = {
 
     -- Mental Quickness: +10% of AP as spell damage per rank
     MENTAL_QUICKNESS = {
-        tab = 2, index = 15, maxRanks = 3,
+        tab = 2, index = 19, maxRanks = 3,
         perRank = 0.10,
         type = "conditional",
         condition = "adds 10% AP as spell damage",
@@ -1202,7 +1202,7 @@ SpellTooltips.TalentInfo = {
     -- Two-Handed Weapon Specialization (Arms): +2% damage with 2H per rank
     -- Note: This bonus is already reflected in the game's weapon damage tooltip/API values
     TWO_HANDED_WEAPON_SPEC_WARRIOR = {
-        tab = 1, index = 19, maxRanks = 5,
+        tab = 1, index = 15, maxRanks = 5,
         perRank = 0.02,
         type = "multiplier",
         name = "Two-Handed Weapon Specialization",
@@ -1215,7 +1215,7 @@ SpellTooltips.TalentInfo = {
     -- One-Handed Weapon Specialization (Arms): +2% damage with 1H per rank
     -- Note: This bonus is already reflected in the game's weapon damage tooltip/API values
     ONE_HANDED_WEAPON_SPEC = {
-        tab = 1, index = 23, maxRanks = 5,
+        tab = 3, index = 16, maxRanks = 5,
         perRank = 0.02,
         type = "multiplier",
         name = "One-Handed Weapon Specialization",
@@ -1227,7 +1227,7 @@ SpellTooltips.TalentInfo = {
 
     -- Dual Wield Specialization (Fury): +5% off-hand damage per rank
     DUAL_WIELD_SPEC_WARRIOR = {
-        tab = 2, index = 18, maxRanks = 5,
+        tab = 2, index = 17, maxRanks = 5,
         perRank = 0.05,
         type = "multiplier",
         name = "Dual Wield Specialization",
@@ -1242,7 +1242,7 @@ SpellTooltips.TalentInfo = {
 
     -- Impale (Arms): +10% crit damage per rank
     IMPALE = {
-        tab = 1, index = 10, maxRanks = 2,
+        tab = 1, index = 18, maxRanks = 2,
         perRank = 0.10,
         type = "critdamage",
         name = "Impale",
@@ -1256,7 +1256,7 @@ SpellTooltips.TalentInfo = {
 
     -- Improved Overpower (Arms): +25% crit chance to Overpower per rank
     IMPROVED_OVERPOWER = {
-        tab = 1, index = 7, maxRanks = 2,
+        tab = 1, index = 10, maxRanks = 2,
         perRank = 0.25,
         affects = { "Overpower" },
         type = "crit",
@@ -1267,7 +1267,7 @@ SpellTooltips.TalentInfo = {
 
     -- Cruelty (Fury): +1% crit to all attacks per rank
     CRUELTY = {
-        tab = 2, index = 3, maxRanks = 5,
+        tab = 2, index = 4, maxRanks = 5,
         perRank = 0.01,
         type = "crit",
         name = "Cruelty",
@@ -1281,7 +1281,7 @@ SpellTooltips.TalentInfo = {
 
     -- Enrage (Fury): +5% damage after crit per rank
     ENRAGE = {
-        tab = 2, index = 14, maxRanks = 5,
+        tab = 2, index = 2, maxRanks = 5,
         perRank = 0.05,
         type = "conditional",
         condition = "for 12s after being crit",
@@ -1318,7 +1318,7 @@ SpellTooltips.TalentInfo = {
 
     -- Shield Mastery (Protection): +10% block value per rank
     SHIELD_MASTERY = {
-        tab = 3, index = 8, maxRanks = 3,
+        tab = 3, index = 20, maxRanks = 3,
         perRank = 0.10,
         type = "multiplier",
         name = "Shield Mastery",
@@ -1339,7 +1339,7 @@ SpellTooltips.TalentInfo = {
 
     -- Malice: +1% crit to all abilities per rank
     MALICE = {
-        tab = 1, index = 5, maxRanks = 5,
+        tab = 1, index = 3, maxRanks = 5,
         perRank = 0.01,
         type = "crit",
         name = "Malice",
@@ -1353,7 +1353,7 @@ SpellTooltips.TalentInfo = {
 
     -- Lethality: +6% crit damage per rank to physical crits
     LETHALITY = {
-        tab = 1, index = 11, maxRanks = 5,
+        tab = 1, index = 2, maxRanks = 5,
         perRank = 0.06,
         type = "critdamage",
         name = "Lethality",
@@ -1367,7 +1367,7 @@ SpellTooltips.TalentInfo = {
 
     -- Aggression: +2% damage to Sinister Strike, Backstab, Eviscerate per rank
     AGGRESSION = {
-        tab = 2, index = 15, maxRanks = 3,
+        tab = 2, index = 17, maxRanks = 3,
         perRank = 0.02,
         affects = { "Sinister Strike", "Backstab", "Eviscerate" },
         type = "multiplier",
@@ -1400,7 +1400,7 @@ SpellTooltips.TalentInfo = {
 
     -- Dual Wield Specialization: +2% off-hand damage per rank
     DUAL_WIELD_SPEC = {
-        tab = 2, index = 6, maxRanks = 5,
+        tab = 2, index = 12, maxRanks = 5,
         perRank = 0.02,
         type = "multiplier",
         name = "Dual Wield Specialization",
@@ -1415,7 +1415,7 @@ SpellTooltips.TalentInfo = {
 
     -- Murder: +2% damage vs humanoids, giants, beasts, dragonkin per rank
     MURDER = {
-        tab = 1, index = 9, maxRanks = 2,
+        tab = 1, index = 6, maxRanks = 2,
         perRank = 0.02,
         type = "conditional",
         condition = "vs Humanoids, Giants, Beasts, Dragonkin",
@@ -1426,7 +1426,7 @@ SpellTooltips.TalentInfo = {
 
     -- Find Weakness: +2% damage per rank after opener (Ambush, Garrote, Cheap Shot)
     FIND_WEAKNESS = {
-        tab = 1, index = 20, maxRanks = 5,
+        tab = 1, index = 17, maxRanks = 5,
         perRank = 0.02,
         type = "conditional",
         condition = "for 10s after Ambush, Garrote, or Cheap Shot",
@@ -1700,7 +1700,7 @@ BuildComputedCache = function()
 
                 -- Crit damage bonuses
                 elseif talentInfo.type == "critdamage" then
-                    if talentInfo.isPhysical then
+                    if talentInfo.isPhysical or talentInfo.isRanged then
                         -- Physical crit damage (Impale, Lethality, Mortal Shots)
                         computedCache.critDamagePhysical = computedCache.critDamagePhysical + bonus
                     elseif talentInfo.affects then

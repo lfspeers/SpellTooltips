@@ -666,7 +666,7 @@ local function BuildPhysicalTooltip(tooltip, spellData, spellID)
     local critMultiplier = Talents.GetCritDamageMultiplier(spellData.school, true, spellData.name)
     local critMin = Round(dmgMin * critMultiplier)
     local critMax = Round(dmgMax * critMultiplier)
-    tooltip:AddLine(string.format("Crit: %s%d-%d%s (%.1f%% @ %.1fx)",
+    tooltip:AddLine(string.format("Crit: %s%d-%d%s (%.1f%% @ %.2fx)",
         C.CRIT, critMin, critMax, C.RESET, totalCritChance, critMultiplier), 1, 1, 1)
 
     -- Special notes
@@ -906,7 +906,7 @@ local function FormatDamageBreakdown(data, spellData, spellPower)
         if totalCritChance > 0 then
             local critMin = Round(newMin * critMult)
             local critMax = Round(newMax * critMult)
-            table.insert(lines, string.format("Crit: %s%d-%d%s (%.1f%% @ %.1fx)",
+            table.insert(lines, string.format("Crit: %s%d-%d%s (%.1f%% @ %.2fx)",
                 C.CRIT, critMin, critMax, C.RESET, totalCritChance, critMult))
         end
     end
@@ -978,7 +978,7 @@ local function FormatChanneledDamage(data, spellData, spellPower)
             -- Calculate per-tick crit damage
             local newPerTick = Round(data.damageMin * multiplier + perTickBonus)
             local critPerTick = Round(newPerTick * critMult)
-            table.insert(lines, string.format("Crit: %s%d%s/tick (%.1f%% @ %.1fx)",
+            table.insert(lines, string.format("Crit: %s%d%s/tick (%.1f%% @ %.2fx)",
                 C.CRIT, critPerTick, C.RESET, totalCritChance, critMult))
         end
     end
@@ -1319,7 +1319,7 @@ local function BuildTooltip(tooltip, spellID, originalData)
         local critMultiplier = Talents.GetCritDamageMultiplier(spellData.school, true, spellData.name)
         local critMin = Round(dmgMin * critMultiplier)
         local critMax = Round(dmgMax * critMultiplier)
-        tooltip:AddLine(string.format("Crit: %s%d-%d%s (%.1f%% @ %.1fx)",
+        tooltip:AddLine(string.format("Crit: %s%d-%d%s (%.1f%% @ %.2fx)",
             C.CRIT, critMin, critMax, C.RESET, totalCritChance, critMultiplier), 1, 1, 1)
 
         -- Special notes
@@ -1457,7 +1457,7 @@ local function BuildTooltip(tooltip, spellID, originalData)
             local critMultiplier = Talents.GetCritDamageMultiplier(spellData.school, true, spellData.name)
             local critMin = Round(finalMin * critMultiplier)
             local critMax = Round(finalMax * critMultiplier)
-            tooltip:AddLine(string.format("Crit: %s%d-%d%s (%.1f%% @ %.1fx)",
+            tooltip:AddLine(string.format("Crit: %s%d-%d%s (%.1f%% @ %.2fx)",
                 C.CRIT, critMin, critMax, C.RESET, totalCritChance, critMultiplier), 1, 1, 1)
 
             -- Judgement section
@@ -1473,7 +1473,7 @@ local function BuildTooltip(tooltip, spellID, originalData)
             -- Judgement crit info (uses melee crit with x2 multiplier)
             local judgementCritMin = Round(judgementTotalMin * critMultiplier)
             local judgementCritMax = Round(judgementTotalMax * critMultiplier)
-            tooltip:AddLine(string.format("Crit: %s%d-%d%s (%.1f%% @ %.1fx)",
+            tooltip:AddLine(string.format("Crit: %s%d-%d%s (%.1f%% @ %.2fx)",
                 C.CRIT, judgementCritMin, judgementCritMax, C.RESET, totalCritChance, critMultiplier), 1, 1, 1)
 
             -- Shared modifiers
@@ -1612,7 +1612,7 @@ local function BuildTooltip(tooltip, spellID, originalData)
             local critMultiplier = Talents.GetCritDamageMultiplier(spellData.school, false, spellData.name)
             local judgementCritMin = Round(judgementTotalMin * critMultiplier)
             local judgementCritMax = Round(judgementTotalMax * critMultiplier)
-            tooltip:AddLine(string.format("Crit: %s%d-%d%s (%.1f%% @ %.1fx)",
+            tooltip:AddLine(string.format("Crit: %s%d-%d%s (%.1f%% @ %.2fx)",
                 C.CRIT, judgementCritMin, judgementCritMax, C.RESET, totalCritChance, critMultiplier), 1, 1, 1)
 
             -- Shared modifiers
@@ -1693,7 +1693,7 @@ local function BuildTooltip(tooltip, spellID, originalData)
             local critMult = Talents.GetCritDamageMultiplier(spellData.school, false, spellData.name)
 
             if totalCritChance > 0 then
-                tooltip:AddLine(string.format("Crit: %s%.1fx%s (%.1f%% chance)",
+                tooltip:AddLine(string.format("Crit: %s%.2fx%s (%.1f%% chance)",
                     C.CRIT, critMult, C.RESET, totalCritChance), 1, 1, 1)
             end
         end
@@ -1753,7 +1753,7 @@ local function BuildTooltip(tooltip, spellID, originalData)
             local critMult = Talents.GetCritDamageMultiplier(spellData.school, false, spellData.name)
 
             if totalCritChance > 0 then
-                tooltip:AddLine(string.format("Crit: %s%.1fx%s (%.1f%% chance)",
+                tooltip:AddLine(string.format("Crit: %s%.2fx%s (%.1f%% chance)",
                     C.CRIT, critMult, C.RESET, totalCritChance), 1, 1, 1)
             end
         end
