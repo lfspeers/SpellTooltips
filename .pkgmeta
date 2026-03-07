@@ -1,7 +1,7 @@
 package-as: SpellTooltips
 
 # Set this to your CurseForge project ID after creating the project
-# curseforge-project-id: 123456
+curseforge-project-id: 1479380
 
 enable-nolib-creation: no
 
