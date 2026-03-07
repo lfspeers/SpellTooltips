@@ -1,23 +1,27 @@
 # Changelog
 
-## [4.2.0] - 2026-03-07
+## [4.2.1] - Fix Talent Indices & CurseForge Release
+
+### Fixed
+- Corrected 72 talent indices across all 9 classes to match in-game talent trees
+- Fixed Hunter Mortal Shots not being recognized as ranged crit damage talent
+- Fixed Seal of Righteousness judgement multiplier calculation
+- Fixed CurseForge packaging for TBC Classic
+
+### Changed
+- Crit damage display now uses 2 decimal places (2.25x format)
+
+---
+
+## [4.2.0] - CurseForge Packaging & All Classes Support
 
 ### Added
 - CurseForge packaging workflow for automatic releases
 - Support for all 9 classes: Mage, Paladin, Warlock, Priest, Druid, Shaman, Rogue, Warrior, Hunter
 
-### Fixed
-- Corrected 72 talent indices across all classes to match in-game talent trees
-- Fixed Hunter Mortal Shots not being recognized as ranged crit damage talent
-- Fixed Seal of Righteousness judgement multiplier calculation
-- Improved crit multiplier display precision (now shows 2.25x instead of 2.2x)
-
-### Changed
-- Crit damage display now uses 2 decimal places for better precision
-
 ---
 
-## [4.1.0] - 2026-03-06
+## [4.1.0] - Physical Abilities & Aura Tracking
 
 ### Added
 - Physical ability support for melee classes (Warriors, Rogues, Paladins, Druids, Shamans, Hunters)

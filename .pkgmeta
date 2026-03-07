@@ -5,6 +5,9 @@ curseforge-project-id: 1479380
 
 enable-nolib-creation: no
 
+manual-changelog: CHANGELOG.md
+changelog-format: markdown
+
 ignore:
   - README.md
   - LICENSE
