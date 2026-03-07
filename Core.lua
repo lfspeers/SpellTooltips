@@ -1556,9 +1556,9 @@ local function BuildTooltip(tooltip, spellID, originalData)
                         if text:find("additional") and text:find("Holy damage") then
                             newText = newText:gsub("(additional%s+)(%d+)(%s+Holy%s+damage)", function(prefix, dmgStr, suffix)
                                 local baseDmg = tonumber(dmgStr)
-                                -- Base damage from tooltip already includes talent/aura multipliers
-                                -- Only add our SP/weapon bonus (with multiplier applied to bonus only)
-                                local newDmg = Round(baseDmg + rawBonusDamage * spBonusMultiplier)
+                                -- Tooltip shows raw base damage without talent multipliers
+                                -- Apply multiplier to (base + SP/weapon bonus)
+                                local newDmg = Round((baseDmg + rawBonusDamage) * multiplier)
                                 return prefix .. schoolColor .. newDmg .. C.RESET .. suffix
                             end)
                         end
@@ -1566,13 +1566,13 @@ local function BuildTooltip(tooltip, spellID, originalData)
                             newText = newText:gsub("(cause%s+)(%d+)(%s+to%s+)(%d+)(%s+Holy%s+damage)", function(p1, minStr, p2, maxStr, suffix)
                                 local baseMin = tonumber(minStr)
                                 local baseMax = tonumber(maxStr)
-                                -- Capture base damage for crit calculation
+                                -- Capture base damage for crit calculation (before multipliers)
                                 judgementBaseMin = baseMin
                                 judgementBaseMax = baseMax
-                                -- Base damage from tooltip already includes talent/aura multipliers
-                                -- Only add our judgement bonus (with multiplier applied to bonus only)
-                                local newMin = Round(baseMin + rawJudgementBonus * spBonusMultiplier)
-                                local newMax = Round(baseMax + rawJudgementBonus * spBonusMultiplier)
+                                -- Tooltip shows raw base damage without talent multipliers
+                                -- Apply multiplier to (base + SP bonus)
+                                local newMin = Round((baseMin + rawJudgementBonus) * multiplier)
+                                local newMax = Round((baseMax + rawJudgementBonus) * multiplier)
                                 return p1 .. schoolColor .. newMin .. C.RESET .. p2 .. schoolColor .. newMax .. C.RESET .. suffix
                             end)
                         end
@@ -1599,9 +1599,9 @@ local function BuildTooltip(tooltip, spellID, originalData)
             -- Judgement section
             tooltip:AddLine(" ")
             tooltip:AddLine(C.YELLOW .. "-- Judgement --" .. C.RESET, 1, 1, 1)
-            -- Calculate total judgement damage (base already has multipliers, just add SP bonus)
-            local judgementTotalMin = Round(judgementBaseMin + rawJudgementBonus * spBonusMultiplier)
-            local judgementTotalMax = Round(judgementBaseMax + rawJudgementBonus * spBonusMultiplier)
+            -- Calculate total judgement damage: (base + SP bonus) * multiplier
+            local judgementTotalMin = Round((judgementBaseMin + rawJudgementBonus) * multiplier)
+            local judgementTotalMax = Round((judgementBaseMax + rawJudgementBonus) * multiplier)
             tooltip:AddLine(string.format("Damage: %s%d-%d%s (+%d from %.0f%% SP)",
                 schoolColor, judgementTotalMin, judgementTotalMax, C.RESET, displayJudgementBonus, judgementCoef * 100), 1, 1, 1)
 
