@@ -1,0 +1,14 @@
+package-as: SpellTooltips
+
+# Set this to your CurseForge project ID after creating the project
+# curseforge-project-id: 123456
+
+enable-nolib-creation: no
+
+ignore:
+  - README.md
+  - LICENSE
+  - .gitignore
+  - .github
+  - DAMAGE_FORMULAS.md
+  - deploy.bat
