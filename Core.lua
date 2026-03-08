@@ -1388,10 +1388,10 @@ local function BuildTooltip(tooltip, spellID, originalData)
             local judgementSPBonus = spellPower * judgementCoef
             local judgementBaseMin, judgementBaseMax = 0, 0  -- Will be captured from tooltip
 
-            -- Stunned/Incapacitated damage calculation
+            -- Stunned/Incapacitated damage calculation (Seal of Command only)
             -- Stunned damage = 2x base damage (doubles the proc)
             local stunnedFinalMin, stunnedFinalMax
-            if spellData.stunnedWeaponCoeff then
+            if spellData.name == "Seal of Command" then
                 stunnedFinalMin = finalMin * 2
                 stunnedFinalMax = finalMax * 2
             end
@@ -1439,8 +1439,13 @@ local function BuildTooltip(tooltip, spellID, originalData)
             -- Add breakdown - Seal section
             tooltip:AddLine(" ")
             tooltip:AddLine(C.YELLOW .. "-- Seal --" .. C.RESET, 1, 1, 1)
-            tooltip:AddLine(string.format("Damage: %s%d-%d%s (%.0f%% weapon + %.0f%% SP)",
-                schoolColor, finalMin, finalMax, C.RESET, weaponCoeff * 100, spCoeff * 100), 1, 1, 1)
+            if spCoeff > 0 then
+                tooltip:AddLine(string.format("Damage: %s%d-%d%s (%.0f%% weapon + %.0f%% SP)",
+                    schoolColor, finalMin, finalMax, C.RESET, weaponCoeff * 100, spCoeff * 100), 1, 1, 1)
+            else
+                tooltip:AddLine(string.format("Damage: %s%d-%d%s (%.0f%% weapon)",
+                    schoolColor, finalMin, finalMax, C.RESET, weaponCoeff * 100), 1, 1, 1)
+            end
 
             -- Proc chance for PPM-based seals
             if spellData.ppm then
@@ -1916,7 +1921,14 @@ local function OnActionButtonClick(self, button)
 end
 
 -- Initialize hooks (internal implementation)
+local hooksInitialized = false
 local function InitializeHooksInternal()
+    if hooksInitialized then
+        DebugPrint("Hooks already initialized, skipping")
+        return
+    end
+    hooksInitialized = true
+
     if GameTooltip and GameTooltip.SetSpellByID then
         hooksecurefunc(GameTooltip, "SetSpellByID", OnSetSpellByID)
         DebugPrint("Hooked SetSpellByID")

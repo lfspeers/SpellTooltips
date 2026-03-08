@@ -85,9 +85,10 @@ finalDamage = (AP * apCoefficient) * talentMultiplier * auraMultiplier
 
 **Seal of Command (Proc):**
 ```
-procDamage = (baseWeaponDamage * 0.70 + SP * 0.29) * talentMultiplier * auraMultiplier
+procDamage = baseWeaponDamage * 0.70 * talentMultiplier * auraMultiplier
 ```
 - Uses BASE weapon damage (not AP-modified)
+- No spell power scaling (removed in patch 2.3)
 - 7 PPM proc rate
 
 **Seal of Command (Stunned/Incapacitated):**
@@ -101,13 +102,14 @@ stunnedDamage = baseProcDamage * 2
 judgementDamage = (baseJudgement + SP * 0.43) * talentMultiplier * auraMultiplier
 ```
 - Uses melee crit chance
+- SP scaling only (no weapon/AP scaling)
 
 **Seal of Righteousness (Proc):**
 ```
-procDamage = baseDamage + SP * (0.092 or 0.108) * weaponSpeed + baseWeaponDamage * 0.03
+procDamage = baseDamage + SP * (0.10 or 0.11) * weaponSpeed + baseWeaponDamage * 0.03
 ```
-- 1H weapons: 0.092 coefficient per weapon speed
-- 2H weapons: 0.108 coefficient per weapon speed
+- 1H weapons: 0.10 (10%) coefficient per weapon speed
+- 2H weapons: 0.11 (11%) coefficient per weapon speed
 - Plus 3% of average weapon damage
 
 **Seal of Righteousness (Judgement):**
@@ -281,9 +283,9 @@ finalCritBonus = baseCritBonus * (1 + talentBonus)
 
 | Ability | Type | Scaling | Notes |
 |---------|------|---------|-------|
-| Seal of Command | Proc | 70% wpn + 29% SP | 7 PPM |
+| Seal of Command | Proc | 70% wpn (no SP) | 7 PPM |
 | Seal of Command | Judgement | 43% SP | Melee crit |
-| Seal of Righteousness | Proc | 9.2-10.8% SP/speed | +3% wpn |
+| Seal of Righteousness | Proc | 10-11% SP/speed | +3% wpn |
 | Seal of Righteousness | Judgement | 71.4% SP | Spell crit |
 | Crusader Strike | Physical | 110% wpn | |
 | Consecration | Holy | 95.2% SP | 8 ticks |
