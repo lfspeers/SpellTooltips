@@ -1404,11 +1404,18 @@ local function BuildTooltip(tooltip, spellID, originalData)
                     local text = textLeft:GetText()
                     if text then
                         local newText = text
-                        -- Match "Holy damage equal to X% of normal weapon damage" pattern
+                        -- Match "Holy damage equal to X% of normal weapon damage" pattern (Seal of Command)
                         if text:find("Holy damage equal to") then
                             newText = newText:gsub("(Holy damage equal to )(%d+)(%% of normal weapon damage)",
                                 function(prefix, pct, suffix)
                                     return schoolColor .. finalMin .. "-" .. finalMax .. C.RESET .. " Holy damage"
+                                end)
+                        end
+                        -- Match "additional X% of normal weapon damage" pattern (Seal of Blood/Martyr)
+                        if text:find("additional") and text:find("%% of normal weapon damage") then
+                            newText = newText:gsub("(additional )(%d+)(%% of normal weapon damage)",
+                                function(prefix, pct, suffix)
+                                    return prefix .. schoolColor .. finalMin .. "-" .. finalMax .. C.RESET .. " Holy damage"
                                 end)
                         end
                         -- Match judgement damage pattern ("causing 228 to 252 Holy damage")
