@@ -104,6 +104,24 @@ judgementDamage = (baseJudgement + SP * 0.43) * talentMultiplier * auraMultiplie
 - Uses melee crit chance
 - SP scaling only (no weapon/AP scaling)
 
+**Seal of Blood / Seal of the Martyr (Proc):**
+```
+procDamage = baseWeaponDamage * 0.35 * talentMultiplier * auraMultiplier
+selfDamage = procDamage * 0.10
+```
+- Uses BASE weapon damage (not AP-modified)
+- No spell power scaling
+- Procs on every melee swing (not PPM)
+- Self-damage: 10% of damage dealt
+
+**Seal of Blood / Seal of the Martyr (Judgement):**
+```
+judgementDamage = (baseJudgement + SP * 0.43) * talentMultiplier * auraMultiplier
+selfDamage = judgementDamage * 0.33
+```
+- Uses melee crit chance
+- Self-damage: 33% of damage dealt
+
 **Seal of Righteousness (Proc):**
 ```
 procDamage = baseDamage + SP * (0.10 or 0.11) * weaponSpeed + baseWeaponDamage * 0.03
@@ -285,6 +303,8 @@ finalCritBonus = baseCritBonus * (1 + talentBonus)
 |---------|------|---------|-------|
 | Seal of Command | Proc | 70% wpn (no SP) | 7 PPM |
 | Seal of Command | Judgement | 43% SP | Melee crit |
+| Seal of Blood/Martyr | Proc | 35% wpn (no SP) | Every swing, 10% self-dmg |
+| Seal of Blood/Martyr | Judgement | 43% SP | Melee crit, 33% self-dmg |
 | Seal of Righteousness | Proc | 10-11% SP/speed | +3% wpn |
 | Seal of Righteousness | Judgement | 71.4% SP | Spell crit |
 | Crusader Strike | Physical | 110% wpn | |

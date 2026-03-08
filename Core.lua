@@ -248,6 +248,7 @@ local C = {
     YELLOW = "|cFFFFFF00",
     CYAN = "|cFF00FFFF",
     ORANGE = "|cFFFF8000",
+    RED = "|cFFFF0000",
     MANA = "|cFF0080FF",
     CRIT = "|cFFFF4444",
     RESET = "|r",
@@ -1447,8 +1448,18 @@ local function BuildTooltip(tooltip, spellID, originalData)
                     schoolColor, finalMin, finalMax, C.RESET, weaponCoeff * 100), 1, 1, 1)
             end
 
-            -- Proc chance for PPM-based seals
-            if spellData.ppm then
+            -- Self-damage display for Seal of Blood / Seal of the Martyr
+            if spellData.selfDamagePercent then
+                local selfDmgMin = Round(finalMin * spellData.selfDamagePercent)
+                local selfDmgMax = Round(finalMax * spellData.selfDamagePercent)
+                tooltip:AddLine(string.format("Self-damage: %s%d-%d%s (%.0f%%)",
+                    C.RED, selfDmgMin, selfDmgMax, C.RESET, spellData.selfDamagePercent * 100), 1, 1, 1)
+            end
+
+            -- Proc rate display
+            if spellData.procsEverySwing then
+                tooltip:AddLine(string.format("%sProc: %sEvery melee swing", C.WHITE, C.GRAY), 1, 1, 1)
+            elseif spellData.ppm then
                 local weaponSpeed = GetMainHandSpeed()
                 local procChance = (spellData.ppm * weaponSpeed / 60) * 100
                 tooltip:AddLine(string.format("%sProc: %s%.1f%% (%d PPM @ %.2fs)",
@@ -1474,6 +1485,14 @@ local function BuildTooltip(tooltip, spellID, originalData)
             local judgementTotalMax = Round((judgementBaseMax + judgementSPBonus) * multiplier)
             tooltip:AddLine(string.format("Damage: %s%d-%d%s (+%d from %.0f%% SP)",
                 schoolColor, judgementTotalMin, judgementTotalMax, C.RESET, judgementBonusDmg, judgementCoef * 100), 1, 1, 1)
+
+            -- Judgement self-damage for Seal of Blood / Seal of the Martyr
+            if spellData.judgementSelfDamage then
+                local judgeSelfMin = Round(judgementTotalMin * spellData.judgementSelfDamage)
+                local judgeSelfMax = Round(judgementTotalMax * spellData.judgementSelfDamage)
+                tooltip:AddLine(string.format("Self-damage: %s%d-%d%s (%.0f%%)",
+                    C.RED, judgeSelfMin, judgeSelfMax, C.RESET, spellData.judgementSelfDamage * 100), 1, 1, 1)
+            end
 
             -- Judgement crit info (uses melee crit with x2 multiplier)
             local judgementCritMin = Round(judgementTotalMin * critMultiplier)

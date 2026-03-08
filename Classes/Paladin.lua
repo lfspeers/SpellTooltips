@@ -102,6 +102,16 @@ local PaladinSpells = {
     [20920] = { name = "Seal of Command", school = "holy", isSeal = true, isPhysical = true, weaponDamagePercent = 0.70, judgementCoef = 0.43, ppm = 7 },
     [27170] = { name = "Seal of Command", school = "holy", isSeal = true, isPhysical = true, weaponDamagePercent = 0.70, judgementCoef = 0.43, ppm = 7 },
 
+    -- Seal of Blood (Horde)
+    -- Melee proc: 35% weapon damage as Holy (no SP scaling), procs every swing
+    -- Self-damage: 10% of damage dealt
+    -- Judgement: Base + 43% SP, costs 33% of damage as health
+    [31892] = { name = "Seal of Blood", school = "holy", isSeal = true, isPhysical = true, weaponDamagePercent = 0.35, judgementCoef = 0.43, selfDamagePercent = 0.10, judgementSelfDamage = 0.33, procsEverySwing = true },
+
+    -- Seal of the Martyr (Alliance) - identical mechanics to Seal of Blood
+    -- Added in TBC Classic (patch 2.5.1) for faction parity
+    [348700] = { name = "Seal of the Martyr", school = "holy", isSeal = true, isPhysical = true, weaponDamagePercent = 0.35, judgementCoef = 0.43, selfDamagePercent = 0.10, judgementSelfDamage = 0.33, procsEverySwing = true },
+
     -- Seal of Light (all ranks)
     -- Melee proc: Heals attacker, 15 PPM
     -- Healing scales with AP and SP
